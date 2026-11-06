@@ -4,7 +4,17 @@ One `libsmashline_plugin.nro` that runs both **pre-2.0 (≤ 1.6.8)** and **2.0**
 SSBU 13.0.5. It is official Smashline **v2.0.0** (= current `master`, commit `642dd17`) plus
 `smashline-compat.patch` from this folder.
 
-Status: **code written and logic unit-tested, not built or run on hardware yet.**
+Status: **built (`build/libsmashline_plugin.nro`), not yet run on hardware.**
+
+| file | size | SHA-256 |
+|---|---|---|
+| `build/libsmashline_plugin.nro` (compat) | 417,792 | `5af2c912adfe144e2f9884075848bf9cb2c99cf798adebcc7d281f55e0ea72d6` |
+| official v2.0.0 | 364,544 | `d57a437000d13a85192b79941880b4e3b671d0e4a0291951d426f0f6773e6b92` |
+| official v1.6.8 | 311,296 | `a83636e565be0729271aa7c21817da9aa3b8b3e9b3abed7499c1eeae4cb57d5c` |
+
+Toolchain proof: an unmodified v2.0.0 rebuilt with the same toolchain exports exactly the same 31
+`smashline_*` functions as the official file (360,448 bytes; the repo has no `Cargo.lock`, so
+crates.io dependencies resolve slightly newer). Same skyline-rs revision (`6b52d32`).
 
 ## What it does
 
@@ -73,15 +83,25 @@ New callers go straight to the unmodified 2.0 code.
 * **`smashline_test`** (2024 movesets, Spider-Man, Meiling) is **not a function**. It is the crate/module
   name of the Smashline example template (`#[skyline::main(name = "smashline_test")]`).
 * **`smashline_install_symbol_hook`** is declared in the API crate but **no Smashline plugin has ever
-  implemented it** (every commit checked). A moveset that called it would have failed on every
-  version, so those mods don't call it at startup. The log notes modules that reference it.
+  implemented it** (every commit checked). Skyline plugins link with `--no-gc-sections`, so without
+  LTO every declared import name stays in the binary, used or not. That is why the string appears.
+  A moveset that really called it would have failed on every version. The log notes modules that contain it.
 * Old code that reads the kind straight from memory (`(*weapon).battle_object.kind`) still sees the
   2.0 kind. Only the two kind functions are redirected.
 * Param Config edits keyed by a weapon kind (e.g. Meiling's `-WEAPON_KIND_FOX_BLASTER_BULLET`) are
   matched by Param Config itself, not by Smashline, so they may not reach 2.0-style clones.
 * Movesets with their own hard-coded pre-13.0.5 offsets will still crash in their own code.
 
-## Building (Windows)
+## Building
+
+`cargo skyline` normally finds its base nightly through the GitHub API. If that is unavailable
+(as in the cloud session that built this), the same toolchain can be set up by hand: base nightly =
+the date of the last `bors` commit on `skyline-rs/rust-src` branch `skyline` (currently
+`nightly-2026-02-14`); copy that toolchain to `~/.cargo/skyline/toolchain/skyline`, replace
+`lib/rustlib/src/rust` with a `--recurse-submodules` clone of that branch, then
+`rustup toolchain link skyline-v3 <that dir>`.
+
+### Windows
 
 1. Install **Rust** from https://rustup.rs (accept the Visual Studio Build Tools prompt) and
    **Git** from https://git-scm.com.

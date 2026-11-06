@@ -1,4 +1,4 @@
-From cb5a011dee39835e0a62b7de02bc49bc5f176086 Mon Sep 17 00:00:00 2001
+From 7e1bb515c2a08ff070359a03bee098b1cd07975f Mon Sep 17 00:00:00 2001
 From: Esa <esaashraf24@gmail.com>
 Date: Thu, 5 Nov 2026 23:39:34 +0000
 Subject: [PATCH] Add pre-2.0 ABI compatibility layer (smashline-compat)
@@ -8,11 +8,12 @@ Subject: [PATCH] Add pre-2.0 ABI compatibility layer (smashline-compat)
  src/api.rs                          |  53 +-
  src/cloning/fighters/descriptors.rs |  20 +-
  src/cloning/weapons.rs              |   2 +
- src/compat.rs                       | 861 ++++++++++++++++++++++++++++
- src/compat/revs.rs                  | 231 ++++++++
+ src/compat.rs                       | 926 ++++++++++++++++++++++++++++
+ src/compat/revs.rs                  | 231 +++++++
  src/lib.rs                          |   4 +
+ src/nro_hook.rs                     |   3 +
  src/params.rs                       |   3 +-
- 8 files changed, 1196 insertions(+), 24 deletions(-)
+ 9 files changed, 1264 insertions(+), 24 deletions(-)
  create mode 100644 src/compat.rs
  create mode 100644 src/compat/revs.rs
 
@@ -266,10 +267,10 @@ index e369c0f..5716b90 100644
  pub const VANILLA_WEAPON_COUNT: usize = 0x267;
 diff --git a/src/compat.rs b/src/compat.rs
 new file mode 100644
-index 0000000..df3aa77
+index 0000000..59cbfc7
 --- /dev/null
 +++ b/src/compat.rs
-@@ -0,0 +1,861 @@
+@@ -0,0 +1,926 @@
 +//! # smashline-compat
 +//!
 +//! Lets movesets built against the pre-2.0 smashline API (<= 1.6.8) run on smashline 2.0.
@@ -479,14 +480,33 @@ index 0000000..df3aa77
 +        return Some(index);
 +    }
 +
-+    let module = rtld::find_module_for_address(lr, Section::Text)?;
-+    let text = module.get_address_range(Section::Text);
-+    let name = module
-+        .get_module_name()
-+        .map(|name| name.to_string())
-+        .unwrap_or_else(|| format!("unnamed@{:#x}", text.start));
++    // Normally the caller is in nn::ro's module lists. A plugin whose start-up code runs before
++    // it has been added there is found through the memory map instead (same layout: text,
++    // then rodata directly after it).
++    let (text, rodata, name) = match rtld::find_module_for_address(lr, Section::Text) {
++        Some(module) => {
++            let text = module.get_address_range(Section::Text);
++            let name = module
++                .get_module_name()
++                .map(|name| name.to_string())
++                .unwrap_or_else(|| format!("unnamed@{:#x}", text.start));
++            (text, module.get_address_range(Section::RoData), name)
++        }
++        None => {
++            let info = rtld::nx::query_memory(lr);
++            // perm bit 2 = executable
++            if info.perm & 0x4 == 0 || info.size == 0 {
++                return None;
++            }
++            let text = info.addr..info.addr + info.size;
++            let ro = rtld::nx::query_memory(text.end);
++            let rodata = text.end..text.end + ro.size;
++            let name = read_module_name(&rodata).unwrap_or_else(|| format!("unlisted@{:#x}", text.start));
++            (text, rodata, name)
++        }
++    };
 +
-+    let (abi, reason, forced) = classify_static(module, &name);
++    let (abi, reason, forced) = classify_static(&rodata, &name);
 +
 +    let mut modules = MODULES.write();
 +    if let Some(index) = modules.iter().position(|m| m.text.contains(&lr)) {
@@ -535,7 +555,28 @@ index 0000000..df3aa77
 +    }
 +}
 +
-+fn classify_static(module: &rtld::ModuleObject, name: &str) -> (Abi, String, bool) {
++/// Same as `rtld::ModuleObject::get_module_name`, from the rodata range alone.
++fn read_module_name(rodata: &Range<u64>) -> Option<String> {
++    let info = rtld::nx::query_memory(rodata.start);
++    if info.perm & 1 == 0 || rodata.end < rodata.start + 8 {
++        return None;
++    }
++    unsafe {
++        if *(rodata.start as *const u32) != 0 {
++            return None;
++        }
++        let length = *((rodata.start + 4) as *const i32);
++        if length <= 0 || length > 0x200 || rodata.start + 8 + length as u64 > rodata.end {
++            return None;
++        }
++        let bytes = std::slice::from_raw_parts((rodata.start + 8) as *const u8, length as usize);
++        let path = std::str::from_utf8(bytes).ok()?;
++        let name = path.rsplit(|c| c == '/' || c == '\\').next()?;
++        Some(name.trim_end_matches('\0').to_string())
++    }
++}
++
++fn classify_static(rodata: &Range<u64>, name: &str) -> (Abi, String, bool) {
 +    let lowercase = name.to_ascii_lowercase();
 +    for (fragment, abi) in CONFIG.read().overrides.iter() {
 +        if lowercase.contains(fragment.as_str()) {
@@ -543,7 +584,7 @@ index 0000000..df3aa77
 +        }
 +    }
 +
-+    let rodata = module.get_address_range(Section::RoData);
++    let rodata = rodata.clone();
 +    let info = rtld::nx::query_memory(rodata.start);
 +    if info.perm & 1 == 0 || rodata.end <= rodata.start {
 +        return (Abi::Unknown, "rodata not readable".to_string(), false);
@@ -553,10 +594,12 @@ index 0000000..df3aa77
 +    };
 +
 +    // `install_symbol_hook` is declared in the smashline API crate but no smashline plugin has
-+    // ever exported it, so a call to it fails on every version. Note it for diagnosis.
++    // ever exported it, so a call to it fails on every version. Plugins are linked with
++    // --no-gc-sections, so without LTO every declared import name stays in the binary whether it
++    // is called or not; its presence is usually harmless. Note it for diagnosis.
 +    if contains(bytes, b"smashline_install_symbol_hook") {
 +        log(format!(
-+            "note: module '{}' references smashline_install_symbol_hook, which no smashline release has ever provided; if it calls it, it will panic with \"Could not find 'smashline_install_symbol_hook'\"",
++            "note: module '{}' contains the name smashline_install_symbol_hook (usually just an unused declaration). No smashline release has ever provided it; if the module really calls it, it panics with \"Could not find 'smashline_install_symbol_hook'\"",
 +            name
 +        ));
 +    }
@@ -657,6 +700,25 @@ index 0000000..df3aa77
 +static REAL_GET_KIND: AtomicUsize = AtomicUsize::new(0);
 +static REAL_SV_KIND: AtomicUsize = AtomicUsize::new(0);
 +static KIND_TARGETS_RESOLVED: AtomicBool = AtomicBool::new(false);
++static KIND_PATCH_PENDING: AtomicBool = AtomicBool::new(false);
++
++/// Called after every module load (see `nro_hook`): installs kind emulation for old modules
++/// that were still loading when they were classified.
++pub fn retry_pending_kind_patches() {
++    if !KIND_PATCH_PENDING.swap(false, Ordering::AcqRel) {
++        return;
++    }
++    let pending: Vec<usize> = MODULES
++        .read()
++        .iter()
++        .enumerate()
++        .filter(|(_, m)| m.abi == Abi::Old && !m.kind_patched)
++        .map(|(i, _)| i)
++        .collect();
++    for index in pending {
++        ensure_kind_patch(index);
++    }
++}
 +
 +fn resolve_kind_targets() -> bool {
 +    if KIND_TARGETS_RESOLVED.load(Ordering::Acquire) {
@@ -736,6 +798,10 @@ index 0000000..df3aa77
 +        return;
 +    }
 +    let Some(module) = rtld::find_module_for_address(text_start, Section::Text) else {
++        // Not in nn::ro's lists yet (still loading); retried after the next module load.
++        MODULES.write()[index].kind_patched = false;
++        KIND_PATCH_PENDING.store(true, Ordering::Release);
++        log(format!("module '{}': not registered with nn::ro yet, weapon kind emulation will be installed after it finishes loading", name));
 +        return;
 +    };
 +    let (get_kind, get_kind_ro) = module.patch_imports(legacy_get_kind as *const (), GET_KIND_SYMBOL);
@@ -1390,6 +1456,20 @@ index 413b02a..ad98382 100644
      if utils::env::get_game_version() != semver::Version::new(13, 0, 5) {
          skyline::error::show_error(999, "Smash Ultimate requires an update.\0", "smashline is incompatible with Smash versions other than 13.0.5\0");
          // Do not perform any of the hook installation and let the game proceed as normal.
+diff --git a/src/nro_hook.rs b/src/nro_hook.rs
+index 91ed2ff..12c0c84 100644
+--- a/src/nro_hook.rs
++++ b/src/nro_hook.rs
+@@ -44,6 +44,9 @@ unsafe fn nro_hook(
+         return result;
+     }
+ 
++    // smashline-compat: finish weapon kind emulation for old plugins that were still loading.
++    crate::compat::retry_pending_kind_patches();
++
+     let name = unsafe {
+         skyline::try_from_c_str(&module.Name as *const u8)
+             .unwrap_or_else(|_| String::from("unknown"))
 diff --git a/src/params.rs b/src/params.rs
 index 7194c3b..52a2b69 100644
 --- a/src/params.rs
