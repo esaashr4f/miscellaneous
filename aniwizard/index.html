@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ANIwizard</title>
+<style>
+  :root {
+    --sky1: #ffd6ec; --sky2: #c9b8ff; --sky3: #8fd3ff;
+    --ink: #2a1f4a; --ink-soft: #5b4f7d;
+    --card: rgba(255,255,255,.78); --card-border: rgba(255,255,255,.9);
+    --accent: #ff4fa3; --accent2: #7a5cff; --gold: #ffb400;
+    --ok: #2fbf71; --dim: rgba(42,31,74,.45);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --sky1: #2b1847; --sky2: #1d1f4f; --sky3: #0f2c4d;
+      --ink: #f3ecff; --ink-soft: #c4b8e8;
+      --card: rgba(30,22,60,.78); --card-border: rgba(160,140,255,.35);
+      --dim: rgba(243,236,255,.45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --sky1: #2b1847; --sky2: #1d1f4f; --sky3: #0f2c4d;
+    --ink: #f3ecff; --ink-soft: #c4b8e8;
+    --card: rgba(30,22,60,.78); --card-border: rgba(160,140,255,.35);
+    --dim: rgba(243,236,255,.45);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(160deg, var(--sky1), var(--sky2) 55%, var(--sky3));
+    background-attachment: fixed;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px;
+          grid-template-columns: 1fr 1fr; }
+  @media (max-width: 820px) { .wrap { grid-template-columns: 1fr; } }
+  header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: clamp(28px, 6vw, 44px); letter-spacing: 1px;
+       background: linear-gradient(90deg, var(--accent), var(--accent2));
+       -webkit-background-clip: text; background-clip: text; color: transparent;
+       filter: drop-shadow(0 2px 0 rgba(255,255,255,.6)); }
+  .jp { color: var(--ink-soft); font-size: 14px; }
+  .card { background: var(--card); border: 2px solid var(--card-border); border-radius: 18px;
+          padding: 16px; backdrop-filter: blur(6px); box-shadow: 0 8px 24px rgba(60,30,120,.15); }
+  .stage { position: relative; text-align: center; overflow: hidden; }
+  .mana { font-size: clamp(30px, 7vw, 46px); font-weight: 800; margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+  .mps { color: var(--ink-soft); font-size: 15px; }
+  .goal { margin: 10px 0 4px; font-size: 13px; color: var(--ink-soft); }
+  .bar { height: 12px; border-radius: 99px; background: rgba(120,100,200,.18); overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; border-radius: 99px;
+             background: linear-gradient(90deg, var(--accent), var(--gold)); transition: width .2s; }
+  #wizardBtn { background: none; border: 0; padding: 0; cursor: pointer; margin: 8px auto 0; display: block;
+               width: min(280px, 70vw); touch-action: manipulation; }
+  #wizardBtn svg { width: 100%; height: auto; transition: transform .08s; filter: drop-shadow(0 10px 14px rgba(80,40,160,.3)); }
+  #wizardBtn:active svg { transform: scale(.95) rotate(-2deg); }
+  .float { position: absolute; pointer-events: none; font-weight: 800; color: var(--accent);
+           text-shadow: 0 2px 0 #fff; animation: floatUp .9s ease-out forwards; font-size: 20px; }
+  @keyframes floatUp { to { transform: translateY(-70px) scale(1.2); opacity: 0; } }
+  .limit { margin-top: 10px; }
+  .limit button { width: 100%; margin-top: 8px; }
+  button.big { font: inherit; font-weight: 800; font-size: 17px; border: 0; border-radius: 14px; padding: 12px;
+               color: #fff; cursor: pointer; background: linear-gradient(90deg, var(--accent), var(--accent2));
+               box-shadow: 0 4px 0 rgba(60,20,120,.35); }
+  button.big:disabled { filter: grayscale(.8); opacity: .5; cursor: default; box-shadow: none; }
+  button.big.ready { animation: pulse 0.8s infinite alternate; }
+  @keyframes pulse { to { transform: scale(1.03); box-shadow: 0 0 22px var(--accent); } }
+  h2 { margin: 0 0 10px; font-size: 18px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .buyamt { display: flex; gap: 4px; }
+  .buyamt button { font: inherit; font-size: 12px; font-weight: 700; border: 2px solid var(--accent2); background: transparent;
+                   color: var(--ink); border-radius: 8px; padding: 2px 8px; cursor: pointer; }
+  .buyamt button.on { background: var(--accent2); color: #fff; }
+  .spells { display: grid; gap: 8px; max-height: 62vh; overflow-y: auto; padding-right: 4px; }
+  .spell { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; text-align: left;
+           font: inherit; color: var(--ink); background: rgba(255,255,255,.35); border: 2px solid transparent;
+           border-radius: 14px; padding: 8px 10px; cursor: pointer; }
+  :root[data-theme="dark"] .spell { background: rgba(255,255,255,.06); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .spell { background: rgba(255,255,255,.06); } }
+  .spell:hover:not(:disabled) { border-color: var(--accent); }
+  .spell:disabled { opacity: .45; cursor: default; }
+  .spell.locked { filter: blur(1.5px) grayscale(1); }
+  .spell .ico { font-size: 30px; text-align: center; }
+  .spell .nm { font-weight: 800; }
+  .spell .ds { font-size: 12px; color: var(--ink-soft); }
+  .spell .ct { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .spell .ow { font-size: 12px; color: var(--ink-soft); font-weight: 600; }
+  .ascend { grid-column: 1 / -1; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+  .ascend p { margin: 0; color: var(--ink-soft); font-size: 14px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .small { font: inherit; font-size: 13px; border: 2px solid var(--dim); background: transparent; color: var(--ink);
+           border-radius: 10px; padding: 6px 10px; cursor: pointer; }
+  /* Anime cut-in */
+  #cutin { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 50; overflow: hidden; }
+  #cutin.show { display: block; }
+  #cutin .lines { position: absolute; inset: -50%;
+    background: repeating-conic-gradient(from 0deg, rgba(255,255,255,.0) 0deg 4deg, rgba(255,255,255,.55) 4deg 5deg);
+    animation: spin 1.2s linear infinite; mix-blend-mode: overlay; }
+  #cutin .band { position: absolute; left: -10%; right: -10%; top: 38%; height: 24%; transform: skewY(-6deg);
+    background: linear-gradient(90deg, var(--accent2), var(--accent)); display: flex; align-items: center; justify-content: center;
+    animation: slide 1.6s ease-out forwards; box-shadow: 0 0 40px rgba(255,79,163,.8); }
+  #cutin .band span { color: #fff; font-weight: 900; font-style: italic; font-size: clamp(28px, 8vw, 72px);
+    letter-spacing: 2px; text-shadow: 4px 4px 0 rgba(0,0,0,.25); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes slide { 0% { transform: translateX(-120%) skewY(-6deg); } 20%,80% { transform: translateX(0) skewY(-6deg); }
+                     100% { transform: translateX(120%) skewY(-6deg); opacity: 0; } }
+  body.burst .stage { box-shadow: 0 0 0 4px var(--gold), 0 0 40px var(--gold); }
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--sky1);
+           padding: 10px 16px; border-radius: 12px; font-weight: 700; opacity: 0; transition: opacity .3s; z-index: 60;
+           max-width: calc(100vw - 32px); text-align: center; }
+  #toast.show { opacity: 1; }
+  .sparkle { animation: twinkle 1.6s infinite alternate; transform-origin: center; }
+  @keyframes twinkle { from { opacity: .3; } to { opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>ANIwizard</h1>
+    <span class="jp">アニウィザード · tap, cast, and grow your mana to one <b>krillion</b></span>
+  </header>
+
+  <section class="card stage" id="stage">
+    <div class="mana" id="mana">0</div>
+    <div class="mps"><span id="mps">0</span> mana/sec · <span id="clickv">1</span> per tap</div>
+    <button id="wizardBtn" aria-label="Cast a spark">
+      <svg viewBox="0 0 200 220" aria-hidden="true">
+        <defs>
+          <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#fff6a8"/><stop offset="100%" stop-color="#ffb400" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="robe" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#7a5cff"/><stop offset="100%" stop-color="#4b2fbf"/>
+          </linearGradient>
+          <linearGradient id="hat" x1="0" x2="1">
+            <stop offset="0%" stop-color="#ff4fa3"/><stop offset="100%" stop-color="#b03cff"/>
+          </linearGradient>
+        </defs>
+        <!-- staff orb glow -->
+        <circle cx="160" cy="62" r="30" fill="url(#glow)" class="sparkle"/>
+        <rect x="156" y="70" width="7" height="130" rx="3" fill="#8a5a2b"/>
+        <circle cx="160" cy="62" r="11" fill="#9ff3ff" stroke="#fff" stroke-width="3"/>
+        <!-- robe -->
+        <path d="M60 200 L78 120 Q100 108 122 120 L140 200 Z" fill="url(#robe)"/>
+        <path d="M88 124 L100 200 L112 124" fill="none" stroke="#ffd166" stroke-width="3"/>
+        <!-- arm to staff -->
+        <path d="M120 135 Q140 128 156 118" stroke="#4b2fbf" stroke-width="12" stroke-linecap="round" fill="none"/>
+        <circle cx="158" cy="117" r="7" fill="#ffe3cf"/>
+        <!-- hair back -->
+        <path d="M58 92 Q50 140 70 150 L130 150 Q150 140 142 92 Z" fill="#ff8fc8"/>
+        <!-- face -->
+        <circle cx="100" cy="92" r="38" fill="#ffe3cf"/>
+        <!-- bangs -->
+        <path d="M62 88 Q70 58 100 56 Q130 58 138 88 Q126 76 118 80 Q110 70 100 78 Q90 70 82 80 Q74 76 62 88 Z" fill="#ff8fc8"/>
+        <!-- eyes -->
+        <g>
+          <ellipse cx="85" cy="98" rx="8" ry="11" fill="#3a2a7a"/>
+          <ellipse cx="115" cy="98" rx="8" ry="11" fill="#3a2a7a"/>
+          <ellipse cx="85" cy="101" rx="5" ry="6" fill="#6fd3ff"/>
+          <ellipse cx="115" cy="101" rx="5" ry="6" fill="#6fd3ff"/>
+          <circle cx="88" cy="93" r="3" fill="#fff"/><circle cx="118" cy="93" r="3" fill="#fff"/>
+        </g>
+        <ellipse cx="76" cy="112" rx="6" ry="3" fill="#ff9fb8" opacity=".7"/>
+        <ellipse cx="124" cy="112" rx="6" ry="3" fill="#ff9fb8" opacity=".7"/>
+        <path d="M95 115 Q100 119 105 115" stroke="#a04060" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <!-- hat -->
+        <path d="M48 66 Q100 46 152 66 Q140 74 100 72 Q60 74 48 66 Z" fill="url(#hat)"/>
+        <path d="M70 64 Q86 10 132 4 Q112 28 128 62 Z" fill="url(#hat)"/>
+        <path d="M118 22 l3 7 7 1 -5 5 1 7 -6 -3 -6 3 1 -7 -5 -5 7 -1 z" fill="#ffd166"/>
+      </svg>
+    </button>
+    <div class="goal">Progress to 1 Krillion: <span id="goalPct">0%</span></div>
+    <div class="bar"><i id="goalBar"></i></div>
+    <div class="limit">
+      <div class="goal">Limit Break gauge</div>
+      <div class="bar"><i id="limitBar"></i></div>
+      <button class="big" id="limitBtn" disabled>LIMIT BREAK ×7</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Spellbook
+      <span class="buyamt" id="buyamt">
+        <button data-n="1" class="on">×1</button><button data-n="10">×10</button><button data-n="100">×100</button>
+      </span>
+    </h2>
+    <div class="spells" id="spells"></div>
+  </section>
+
+  <section class="card ascend">
+    <div>
+      <h2 style="margin:0">✦ Ascension</h2>
+      <p>Star Shards: <b id="shards">0</b> (each one <b>doubles</b> all mana: ×<span id="shardMult">1</span> now).
+        Ascending now would give <b id="shardGain">0</b> more. You can ascend once you reach 1 Trillion mana in a run.</p>
+    </div>
+    <div class="row">
+      <button class="big" id="ascendBtn" disabled>Ascend</button>
+      <button class="small" id="themeBtn">Theme</button>
+      <button class="small" id="resetBtn">Hard reset</button>
+    </div>
+  </section>
+</div>
+
+<div id="cutin"><div class="lines"></div><div class="band"><span id="cutinText">LIMIT BREAK!</span></div></div>
+<div id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- Numbers ----------
+  // In ANIwizard lore, one Krillion is 10^36, the tier right after Decillion.
+  const KRILLION = 1e36;
+  const SUFFIX = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc', 'Krillion'];
+  function fmt(n) {
+    if (!isFinite(n)) return '∞';
+    if (n < 1000) return n < 10 && n % 1 ? n.toFixed(1) : Math.floor(n).toString();
+    const tier = Math.floor(Math.log10(n) / 3);
+    if (tier >= SUFFIX.length) {
+      const k = n / KRILLION;
+      return (k >= 1e6 ? k.toExponential(2) : fmt(k)) + ' Krillion';
+    }
+    const v = n / Math.pow(1000, tier);
+    return (v < 100 ? v.toFixed(2) : v.toFixed(1)) + (tier === 12 ? ' ' : '') + SUFFIX[tier];
+  }
+
+  // ---------- Spells (generators) ----------
+  const SPELLS = [
+    ['✨', 'Spark Sprite',      'A tiny familiar that hums mana.'],
+    ['🔥', 'Ember Sigil',       'A fire rune painted in midair.'],
+    ['❄️', 'Frost Familiar',    'A fox spirit made of snow.'],
+    ['⚡', 'Storm Circle',      'Thunder answers your chant.'],
+    ['🌙', 'Moon Library',      'Grimoires that read themselves.'],
+    ['🌸', 'Sakura Golem',      'Petal-stone guardian of the academy.'],
+    ['⭐', 'Star Summoning',    'Pull mana down from constellations.'],
+    ['🐉', 'Comet Dragon',      'Rides meteors and breathes light.'],
+    ['🌀', 'Nebula Gate',       'A portal to a mana-rich sky.'],
+    ['🌌', 'Galaxy Rite',       'A whole galaxy joins the ritual.'],
+    ['🏯', 'Cosmic Academy',    'Every student casts for you.'],
+    ['🪐', 'Planet Forge',      'You hammer worlds into wands.'],
+    ['👁️', 'Third-Eye Chant',   'You can see mana in everything.'],
+    ['♾️', 'Infinity Loop',     'A spell that keeps recasting itself.'],
+    ['🦐', 'Krillion Engine',   'Countless glowing krill-spirits swarm and sing.'],
+  ].map(([ico, name, desc], i) => ({
+    ico, name, desc,
+    baseCost: 15 * Math.pow(11, i),
+    baseRate: 0.1 * Math.pow(12, i) * (i ? 1.6 : 1),
+  }));
+  const COST_GROWTH = 1.15;
+  const MILESTONES = [10, 25, 50, 100, 150, 200, 250, 300, 400, 500];
+
+  // ---------- State ----------
+  const SAVE_KEY = 'aniwizard-save-v1';
+  const fresh = () => ({
+    mana: 0, runTotal: 0, owned: SPELLS.map(() => 0),
+    shards: 0, limit: 0, burstUntil: 0, krillionSeen: false, last: Date.now(),
+  });
+  let S = fresh();
+  let buyN = 1;
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      S = Object.assign(fresh(), d);
+      S.owned = SPELLS.map((_, i) => d.owned?.[i] || 0);
+      const away = Math.min((Date.now() - (S.last || Date.now())) / 1000, 8 * 3600);
+      if (away > 30) {
+        const gain = mps(false) * away * 0.5;
+        gainMana(gain);
+        setTimeout(() => toast(`Welcome back! Your familiars made ${fmt(gain)} mana while you were away.`), 300);
+      }
+    } catch (e) { /* storage unavailable: play without saving */ }
+  }
+  function save() {
+    S.last = Date.now();
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {}
+  }
+
+  // ---------- Formulas ----------
+  const shardMult = () => Math.pow(2, S.shards);
+  const burstOn = () => Date.now() < S.burstUntil;
+  const milestoneMult = (n) => Math.pow(2, MILESTONES.filter(m => n >= m).length);
+  const spellRate = (i) => SPELLS[i].baseRate * S.owned[i] * milestoneMult(S.owned[i]);
+  function mps(withBurst = true) {
+    let r = 0;
+    for (let i = 0; i < SPELLS.length; i++) r += spellRate(i);
+    return r * shardMult() * (withBurst && burstOn() ? 7 : 1);
+  }
+  const clickValue = () => (1 + mps(false) * 0.05) * shardMult() * (burstOn() ? 7 : 1);
+  function costOf(i, n) {
+    const c0 = SPELLS[i].baseCost * Math.pow(COST_GROWTH, S.owned[i]);
+    return c0 * (Math.pow(COST_GROWTH, n) - 1) / (COST_GROWTH - 1);
+  }
+  // One shard per digit of run mana past 1 Trillion (1e12 → 1, 1e20 → 9).
+  const shardGain = () => S.runTotal < 1e12 ? 0 : Math.floor(Math.log10(S.runTotal)) - 11;
+  function gainMana(x) { S.mana += x; S.runTotal += x; }
+
+  // ---------- UI ----------
+  const $ = (id) => document.getElementById(id);
+  const spellsEl = $('spells');
+  const rows = SPELLS.map((sp, i) => {
+    const b = document.createElement('button');
+    b.className = 'spell';
+    b.innerHTML = `<div class="ico">${sp.ico}</div>
+      <div><div class="nm">${sp.name} <span class="ow"></span></div><div class="ds">${sp.desc}</div><div class="ds rt"></div></div>
+      <div class="ct"></div>`;
+    b.addEventListener('click', () => buy(i));
+    spellsEl.appendChild(b);
+    return { b, ow: b.querySelector('.ow'), rt: b.querySelector('.rt'), ct: b.querySelector('.ct') };
+  });
+
+  function buy(i) {
+    const c = costOf(i, buyN);
+    if (S.mana < c) return;
+    const before = S.owned[i];
+    S.mana -= c; S.owned[i] += buyN;
+    const hit = MILESTONES.find(m => before < m && S.owned[i] >= m);
+    if (hit) toast(`${SPELLS[i].name} reached ${hit}! Its power doubles ✦`);
+    render();
+  }
+
+  $('buyamt').addEventListener('click', (e) => {
+    const n = +e.target.dataset.n; if (!n) return;
+    buyN = n;
+    [...$('buyamt').children].forEach(c => c.classList.toggle('on', +c.dataset.n === n));
+    render();
+  });
+
+  $('wizardBtn').addEventListener('pointerdown', (e) => {
+    const v = clickValue();
+    gainMana(v);
+    if (!burstOn()) S.limit = Math.min(100, S.limit + 0.4);
+    const r = $('stage').getBoundingClientRect();
+    const f = document.createElement('div');
+    f.className = 'float';
+    f.textContent = '+' + fmt(v);
+    f.style.left = (e.clientX - r.left - 20) + 'px';
+    f.style.top = (e.clientY - r.top - 30) + 'px';
+    $('stage').appendChild(f);
+    setTimeout(() => f.remove(), 900);
+    render();
+  });
+
+  const CHANTS = ['LIMIT BREAK!', 'STARFALL OVERDRIVE!', 'ARCANE AWAKENING!', 'MANA NOVA!'];
+  $('limitBtn').addEventListener('click', () => {
+    if (S.limit < 100) return;
+    S.limit = 0; S.burstUntil = Date.now() + 20000;
+    cutin(CHANTS[Math.floor(Math.random() * CHANTS.length)]);
+    render();
+  });
+
+  $('ascendBtn').addEventListener('click', () => {
+    const g = shardGain(); if (!g) return;
+    if (!confirm(`Ascend for ${g} Star Shard(s)? Your mana and spells reset, but the shards stay.`)) return;
+    const keep = { shards: S.shards + g, krillionSeen: S.krillionSeen };
+    S = Object.assign(fresh(), keep);
+    cutin('ASCENSION!');
+    save(); render();
+  });
+
+  $('resetBtn').addEventListener('click', () => {
+    if (!confirm('Erase everything, including Star Shards?')) return;
+    S = fresh(); save(); render();
+  });
+
+  $('themeBtn').addEventListener('click', () => {
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark'
+      : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('aniwizard-theme', root.dataset.theme); } catch (e) {}
+  });
+  try { const t = localStorage.getItem('aniwizard-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+  function cutin(text) {
+    $('cutinText').textContent = text;
+    const c = $('cutin');
+    c.classList.remove('show'); void c.offsetWidth; c.classList.add('show');
+    setTimeout(() => c.classList.remove('show'), 1600);
+  }
+  let toastT;
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  function render() {
+    $('mana').textContent = fmt(S.mana);
+    $('mps').textContent = fmt(mps());
+    $('clickv').textContent = fmt(clickValue());
+    const pct = Math.min(100, Math.log10(1 + S.runTotal) / 36 * 100);
+    $('goalPct').textContent = pct.toFixed(1) + '%';
+    $('goalBar').style.width = pct + '%';
+    const on = burstOn();
+    $('limitBar').style.width = (on ? (S.burstUntil - Date.now()) / 200 : S.limit) + '%';
+    const lb = $('limitBtn');
+    lb.disabled = on || S.limit < 100;
+    lb.classList.toggle('ready', !lb.disabled);
+    lb.textContent = on ? `×7 ACTIVE · ${Math.ceil((S.burstUntil - Date.now()) / 1000)}s` : 'LIMIT BREAK ×7';
+    document.body.classList.toggle('burst', on);
+
+    let revealed = 0;
+    SPELLS.forEach((sp, i) => {
+      const r = rows[i], c = costOf(i, buyN);
+      const visible = i === 0 || S.owned[i - 1] > 0 || S.owned[i] > 0;
+      if (visible) revealed = i;
+      r.b.style.display = i <= revealed + 1 ? '' : 'none';
+      r.b.classList.toggle('locked', !visible);
+      r.b.disabled = !visible || S.mana < c;
+      r.ow.textContent = S.owned[i] ? '· ' + S.owned[i] : '';
+      const next = MILESTONES.find(m => S.owned[i] < m);
+      r.rt.textContent = visible
+        ? `${fmt(sp.baseRate * milestoneMult(S.owned[i]) * shardMult())}/s each` + (next ? ` · power doubles at ${next}` : '')
+        : '???';
+      r.ct.textContent = visible ? fmt(c) : '???';
+    });
+
+    $('shards').textContent = S.shards;
+    $('shardMult').textContent = fmt(shardMult());
+    $('shardGain').textContent = shardGain();
+    $('ascendBtn').disabled = shardGain() === 0;
+
+    if (!S.krillionSeen && S.runTotal >= KRILLION) {
+      S.krillionSeen = true;
+      cutin('ONE KRILLION!!');
+      toast('You reached one Krillion mana. You are the true ANIwizard! ✦');
+    }
+  }
+
+  // ---------- Loop ----------
+  let lastTick = performance.now();
+  function tick(now) {
+    const dt = Math.min((now - lastTick) / 1000, 1);
+    lastTick = now;
+    gainMana(mps() * dt);
+    if (!burstOn()) S.limit = Math.min(100, S.limit + dt * 0.3);
+    render();
+    requestAnimationFrame(tick);
+  }
+
+  load();
+  render();
+  requestAnimationFrame(tick);
+  setInterval(save, 5000);
+  addEventListener('beforeunload', save);
+  addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+
+  // Exposed for testing and balancing from the console.
+  window.ANIwizard = { state: () => S, mps, costOf, SPELLS, fmt };
+})();
+</script>
+</body>
+</html>
