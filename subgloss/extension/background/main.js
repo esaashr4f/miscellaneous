@@ -98,7 +98,53 @@
     return { results, error };
   }
 
+  function guideKey(k) {
+    return ['guide', prompt.GUIDE_VERSION, settings.nativeLang, k].join('|');
+  }
+
+  const guidesInflight = new Map(); // guide key -> Set(port, reqId) waiting for it
+
+  async function explainGuide(req, port) {
+    await ready;
+    const key = guideKey(req.form.k);
+    const hit = (await cache.getMany('guides', [key])).get(key);
+    if (hit) {
+      port.postMessage({ type: 'deepDone', reqId: req.reqId, text: hit.text });
+      return;
+    }
+    // The same form can be hovered in several places at once; write its guide only once.
+    if (guidesInflight.has(key)) {
+      guidesInflight.get(key).push({ port, reqId: req.reqId });
+      return;
+    }
+    const waiters = [{ port, reqId: req.reqId }];
+    guidesInflight.set(key, waiters);
+    const each = (fn) => {
+      for (const w of waiters) {
+        try {
+          fn(w);
+        } catch (e) {
+          /* that tab went away */
+        }
+      }
+    };
+    try {
+      const text = await claude.explainForm(settings, req, (delta) => each((w) => w.port.postMessage({ type: 'deepDelta', reqId: w.reqId, delta })));
+      const entry = {
+        key, k: req.form.k, name: req.form.name || req.form.k, lang: req.lang || '', nativeLang: settings.nativeLang,
+        text, sentence: req.sentence || '', word: req.word || '', model: settings.model, savedAt: Date.now(),
+      };
+      cache.putMany('guides', [[key, entry]]).catch(() => {});
+      each((w) => w.port.postMessage({ type: 'deepDone', reqId: w.reqId, text }));
+    } catch (err) {
+      each((w) => w.port.postMessage({ type: 'deepError', reqId: w.reqId, message: err.message }));
+    } finally {
+      guidesInflight.delete(key);
+    }
+  }
+
   async function explain(req, port) {
+    if (req.kind === 'guide' && req.form && req.form.k) return explainGuide(req, port);
     await ready;
     const key = [fingerprint(), 'deep', req.key, req.word && req.word.s, req.wordIndex].join('|');
     const hit = (await cache.getMany('deep', [key])).get(key);
@@ -154,6 +200,9 @@
         explain(msg, port);
       } else if (msg.type === 'state') {
         tabStatus.set(tabId, Object.assign({ at: Date.now() }, msg.state));
+      } else if (msg.type === 'openLibrary') {
+        const url = browser.runtime.getURL('grammar/grammar.html') + (msg.k ? '#' + encodeURIComponent(msg.k) : '');
+        browser.tabs.create({ url, index: port.sender.tab.index + 1 });
       } else if (msg.type === 'saveSettings') {
         SG.saveSettings(msg.patch);
       }

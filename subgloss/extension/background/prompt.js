@@ -4,7 +4,9 @@
   const SG = (root.SG = root.SG || {});
 
   // Bump when the prompt or schema changes so cached analyses from the old version are not reused.
-  const PROMPT_VERSION = 3;
+  const PROMPT_VERSION = 4;
+  // Grammar guides are cached by form, separately from line analyses.
+  const GUIDE_VERSION = 1;
 
   const ROLES = [
     'subject', 'topic', 'object', 'indirect_object', 'predicate', 'complement', 'modifier',
@@ -35,7 +37,7 @@
               items: {
                 type: 'object',
                 additionalProperties: false,
-                required: ['s', 'r', 'd', 'pos', 'm', 'p', 'c', 'role', 'n'],
+                required: ['s', 'r', 'd', 'pos', 'm', 'p', 'c', 'role', 'n', 'g'],
                 properties: {
                   s: { type: 'string', description: 'The word exactly as it appears in the line.' },
                   r: { type: 'string', description: 'Pronunciation aid, or an empty string when the spelling already shows it.' },
@@ -58,6 +60,19 @@
                   c: { type: 'integer', description: 'Phrase number, starting at 0. Consecutive words in the same phrase share it.' },
                   role: { type: 'string', enum: ROLES, description: 'The job this word\'s phrase does in the sentence.' },
                   n: { type: 'string', description: 'One or two sentences shown when the learner hovers the word.' },
+                  g: {
+                    type: 'array',
+                    description: 'Grammar forms this word carries that are worth studying, most important first.',
+                    items: {
+                      type: 'object',
+                      additionalProperties: false,
+                      required: ['k', 'name'],
+                      properties: {
+                        k: { type: 'string', description: 'Stable identifier: language code, a dot, English snake_case name of the form.' },
+                        name: { type: 'string', description: 'Short label for the form, including the form itself.' },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -90,6 +105,10 @@ d: the dictionary form.
 pos: part of speech and the form it is in.
 c and role: group the words into phrases. Words in the same phrase share a phrase number c, counted from 0 in order, and share the role that phrase plays in the sentence. A noun and the particle or case ending that marks it belong to one phrase.
 n: one or two sentences for the hover note: why this form is used here, the nuance against a near-synonym, the register, a common confusion, the literal image behind the expression. Say something the gloss does not already say.
+g: the grammar forms this word carries that a learner would want to study, most important first. These open a full guide to the form, so list forms, not vocabulary: conjugations and auxiliaries (causative-passive, ～ている, conditional ～ば), particles and endings with a grammatical job (topic は, connective -아서/어서, aspect 了), and, for a pattern spread over several words (把 sentences, ～ば～ほど, 是…的), the word that carries it. Each has:
+  k: a stable identifier made of the language code, a dot and an English snake_case name for the form, written the same way every time the form appears, in any word and any line (ja.causative_passive, ja.te_iru, ja.particle_wa, ko.connective_aseo, zh.ba_construction, de.konjunktiv_2). One identifier per form, not per use: the guide for a form covers all of its uses.
+  name: a short label in ${nativeLang} that includes the form itself, for example "causative-passive させられる".
+Leave g empty for words with nothing to study beyond their meaning, such as most nouns and plain dictionary-form words. Skip forms so basic they need no explanation for this word, such as a plain past tense when a rarer form in the same word is the point.
 
 How to split words:
 
@@ -137,5 +156,43 @@ Pieces: ${pieces}
 Note already shown: ${w.n || ''}`;
   }
 
-  SG.prompt = { PROMPT_VERSION, ROLES, ANALYSIS_SCHEMA, systemPrompt, userMessage, deepSystemPrompt, deepUserMessage };
+  function guideSystemPrompt(nativeLang) {
+    return `A language learner watching a show has just met a grammar form. They want to understand it completely, once, so that from now on they recognise it, know exactly what it adds, and know when to use it and when not to. They read ${nativeLang}; write in ${nativeLang}, quoting the language being learned, with a reading in brackets after anything a learner might not be able to pronounce.
+
+Write a complete guide to the form under these headings, each on its own line starting with "## ":
+
+## What it is
+One or two sentences: what the form does, in plain words, and the core idea that ties its uses together.
+
+## How to make it
+The construction rules for every kind of word it attaches to, including irregular words and any sound or spelling changes, with a short example of each. Mention the contracted or casual versions heard in real dialogue, and how it combines with other common endings (negative, past, polite).
+
+## When to use it
+Every common use, one per list item. For each: what it adds to the meaning, and an example sentence with its translation.
+
+## When it seems to fit but doesn't
+The situations where a learner would reach for this form but the language uses something else. For each: the situation, what to use instead, why, and a pair of example sentences contrasting the two. Include the forms it is most often confused with and the line between them.
+
+## Nuance and register
+How it sounds: politeness, formality, emotional colour (for example resentment, regret, gratitude), spoken versus written use, and how speakers soften, strengthen or avoid it.
+
+## Common mistakes
+The mistakes learners actually make with it, each with the correction.
+
+## Where you met it
+Two or three sentences on what the form is doing in the line where the learner met it.
+
+Formatting: plain text only, apart from the "## " headings. Start a line with "- " for a list item. Put each example sentence on its own line, followed by " — " and its translation. Be thorough without padding; most guides need 500 to 900 words. Accuracy matters more than coverage: state only rules you are sure of, and say so when usage varies between speakers or regions.`;
+  }
+
+  function guideUserMessage(req) {
+    const f = req.form || {};
+    return `Form: ${f.name || f.k}
+Identifier: ${f.k}
+Language: ${req.lang || 'unknown'}
+Line where the learner met it: ${req.sentence || ''}
+Word that carries it there: ${req.word || ''}`;
+  }
+
+  SG.prompt = { PROMPT_VERSION, GUIDE_VERSION, guideSystemPrompt, guideUserMessage, ROLES, ANALYSIS_SCHEMA, systemPrompt, userMessage, deepSystemPrompt, deepUserMessage };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -55,7 +55,9 @@
   let leaveTimer = null;
   let deepTimer = null;
   let deepReq = 0;
-  const deepTexts = new Map();
+  const deepTexts = new Map(); // cache key -> finished text (word explanations and grammar guides)
+  const deepByReq = new Map(); // reqId -> { el, cacheKey, text, guide }
+  const deepByKey = new Map(); // cache key -> the same object, while its text is still streaming
   let popFor = null;
 
   let domEl = null; // caption element being read from the page
@@ -550,11 +552,22 @@
     tools.append(select, fileBtn, pickBtn, early, offset, late, file);
 
     const hint = h('div', 'sg-hint');
+    const guide = h('div', 'sg-pguide');
+    const guideHead = h('div', 'sg-pguide-head');
+    const guideTitle = h('span', 'sg-pguide-title');
+    const guideLib = h('button', 'sg-btn', 'Library');
+    guideLib.title = 'All grammar guides you have collected';
+    guideLib.addEventListener('click', () => post({ type: 'openLibrary', k: guide.dataset.k || '' }));
+    const guideBack = h('button', 'sg-btn', 'Back');
+    guideBack.addEventListener('click', () => guide.classList.remove('sg-show'));
+    guideHead.append(guideTitle, guideLib, guideBack);
+    const guideBody = h('div', 'sg-pguide-body');
+    guide.append(guideHead, guideBody);
     const detail = h('div', 'sg-detail');
     const listTitle = h('div', 'sg-section', 'Transcript');
     const list = h('div', 'sg-list');
-    el.append(head, tools, hint, detail, listTitle, list);
-    return { el, status, select, offset, hint, detail, list, rows: new Map() };
+    el.append(head, tools, hint, guide, detail, listTitle, list);
+    return { el, status, select, offset, hint, guide, guideTitle, guideBody, detail, list, rows: new Map() };
   }
 
   // Keep the overlay glued to the video, including in fullscreen.
@@ -739,7 +752,7 @@
     if (a && a.w && a.w.length) {
       line.lang = a.lang || '';
       let lastPhrase = null;
-      const ctx = { key, sentence: cue.text, translation: a.tr };
+      const ctx = { key, sentence: cue.text, translation: a.tr, lang: a.lang };
       let index = 0;
       for (const item of alignWords(cue.text, a.w)) {
         if (item.gap != null) {
@@ -826,7 +839,6 @@
     if (!ui) return;
     clearTimeout(deepTimer);
     clearTimeout(hoverTimer);
-    deepReq++;
     popFor = null;
     ui.pop.classList.remove('sg-show');
     const cur = ui.line.querySelector('.sg-on');
@@ -845,6 +857,7 @@
     tok.classList.add('sg-on');
     const pop = ui.pop;
     pop.textContent = '';
+    pop.classList.remove('sg-wide');
 
     const head = h('div', 'sg-pop-head');
     head.append(h('span', 'sg-pop-word', w.s));
@@ -866,17 +879,49 @@
     }
     if (w.n) pop.append(h('div', 'sg-pop-note', w.n));
 
+    const forms = formsOf(w);
     const deep = h('div', 'sg-pop-deep');
+    if (forms.length) {
+      const row = h('div', 'sg-pop-forms');
+      row.append(h('span', 'sg-pop-forms-label', 'Grammar'));
+      forms.forEach((f, i) => {
+        const chip = h('button', 'sg-form' + (i === 0 ? ' sg-on' : ''), f.name || f.k);
+        chip.title = 'Full guide to this form';
+        chip.addEventListener('click', () => {
+          clearTimeout(deepTimer);
+          for (const c of row.querySelectorAll('.sg-form')) c.classList.toggle('sg-on', c === chip);
+          pop.classList.add('sg-wide');
+          showGuide(deep, f, ctx, w);
+          placePop(tok);
+        });
+        row.append(chip);
+      });
+      const lib = h('button', 'sg-btn sg-lib', 'Library');
+      lib.title = 'All grammar guides you have collected';
+      lib.addEventListener('click', () => post({ type: 'openLibrary', k: currentFormKey(row, forms) }));
+      row.append(lib);
+      pop.append(row);
+    }
     pop.append(deep);
-    const deepKey = ctx.key + '|' + index;
-    const ask = () => requestDeep(deep, deepKey, w, index, ctx);
-    if (deepTexts.has(deepKey)) {
-      deep.textContent = deepTexts.get(deepKey);
-      deep.classList.add('sg-show');
+
+    const wordKey = 'word|' + ctx.key + '|' + index;
+    const first = forms[0];
+    const ask = () => {
+      if (first) {
+        pop.classList.add('sg-wide');
+        showGuide(deep, first, ctx, w);
+        placePop(tok);
+      } else {
+        showWordExplanation(deep, wordKey, w, index, ctx);
+      }
+    };
+    const ready = first ? deepTexts.has(guideCacheKey(first)) : deepTexts.has(wordKey);
+    if (ready) {
+      ask();
     } else if (settings.hasKey && settings.autoDeep) {
       deepTimer = setTimeout(ask, 650);
     } else if (settings.hasKey) {
-      const more = h('button', 'sg-btn', 'Explain more');
+      const more = h('button', 'sg-btn', first ? 'Full guide to ' + (first.name || first.k) : 'Explain more');
       more.addEventListener('click', () => {
         more.remove();
         ask();
@@ -885,7 +930,13 @@
     }
 
     pop.classList.add('sg-show');
-    // Centre the popup above the word, kept inside the video.
+    placePop(tok);
+  }
+
+  // Centre the popup above the word, kept inside the video.
+  function placePop(tok) {
+    const pop = ui.pop;
+    if (!tok.isConnected) return;
     const rr = ui.root.getBoundingClientRect();
     const tr = tok.getBoundingClientRect();
     const pw = pop.offsetWidth;
@@ -897,31 +948,84 @@
     pop.style.maxHeight = Math.max(120, tr.top - rr.top - 14) + 'px';
   }
 
-  let deepTarget = null;
-  function requestDeep(el, deepKey, w, index, ctx) {
+  function formsOf(w) {
+    const seen = new Set();
+    return (Array.isArray(w.g) ? w.g : []).filter((f) => f && f.k && !seen.has(f.k) && seen.add(f.k));
+  }
+
+  function currentFormKey(row, forms) {
+    const chips = Array.from(row.querySelectorAll('.sg-form'));
+    const at = chips.findIndex((c) => c.classList.contains('sg-on'));
+    return (forms[at] || forms[0] || {}).k || '';
+  }
+
+  function guideCacheKey(form) {
+    return 'guide|' + form.k;
+  }
+
+  function paintDeep(target) {
+    if (target.guide) SG.renderGuide(target.el, target.text);
+    else target.el.textContent = target.text;
+  }
+
+  // Shows cached text at once, attaches to a request already streaming, or starts a new one.
+  function startDeep(el, cacheKey, guide, payload) {
+    el.classList.add('sg-show');
+    el.classList.toggle('sg-guide', guide);
+    if (deepTexts.has(cacheKey)) {
+      el.classList.remove('sg-loading');
+      paintDeep({ el, text: deepTexts.get(cacheKey), guide });
+      return;
+    }
+    const running = deepByKey.get(cacheKey);
+    if (running) {
+      running.el = el;
+      if (running.text) paintDeep(running);
+      else {
+        el.textContent = guide ? 'Writing a guide to this form…' : 'Explaining…';
+        el.classList.add('sg-loading');
+      }
+      return;
+    }
     const reqId = ++deepReq;
-    deepTarget = { reqId, el, deepKey, text: '' };
-    el.textContent = 'Explaining…';
-    el.classList.add('sg-show', 'sg-loading');
-    post({
-      type: 'deep', reqId, key: ctx.key, wordIndex: index, sentence: ctx.sentence, translation: ctx.translation,
+    const target = { el, cacheKey, text: '', guide };
+    deepByReq.set(reqId, target);
+    deepByKey.set(cacheKey, target);
+    el.textContent = guide ? 'Writing a guide to this form… (saved once written, so it opens instantly next time)' : 'Explaining…';
+    el.classList.add('sg-loading');
+    post(Object.assign({ type: 'deep', reqId }, payload));
+  }
+
+  function showGuide(el, form, ctx, w) {
+    startDeep(el, guideCacheKey(form), true, {
+      kind: 'guide', form: { k: form.k, name: form.name }, lang: ctx.lang, sentence: ctx.sentence, word: w.s,
+    });
+  }
+
+  function showWordExplanation(el, cacheKey, w, index, ctx) {
+    startDeep(el, cacheKey, false, {
+      key: ctx.key, wordIndex: index, sentence: ctx.sentence, translation: ctx.translation,
       word: { s: w.s, r: w.r, d: w.d, pos: w.pos, m: w.m, p: w.p, n: w.n },
     });
   }
 
   function onDeep(msg) {
-    const d = deepTarget;
-    if (msg.type === 'deepDone' && d && msg.reqId === d.reqId) deepTexts.set(d.deepKey, msg.text);
-    // The popup may have moved on to another word while this was streaming.
-    if (!d || msg.reqId !== d.reqId || msg.reqId !== deepReq) return;
-    d.el.classList.remove('sg-loading');
+    const target = deepByReq.get(msg.reqId);
+    if (!target) return;
+    target.el.classList.remove('sg-loading');
     if (msg.type === 'deepDelta') {
-      d.text += msg.delta;
-      d.el.textContent = d.text;
-    } else if (msg.type === 'deepDone') {
-      d.el.textContent = msg.text;
+      target.text += msg.delta;
+      paintDeep(target);
+      return;
+    }
+    deepByReq.delete(msg.reqId);
+    deepByKey.delete(target.cacheKey);
+    if (msg.type === 'deepDone') {
+      deepTexts.set(target.cacheKey, msg.text);
+      target.text = msg.text;
+      paintDeep(target);
     } else {
-      d.el.textContent = msg.message;
+      target.el.textContent = msg.message;
     }
   }
 
@@ -964,6 +1068,29 @@
       box.append(h('div', 'sg-section', 'Notes'));
       for (const n of a.notes) box.append(h('div', 'sg-d-note', n));
     }
+    const forms = [];
+    const seen = new Set();
+    for (const w of words) {
+      for (const f of formsOf(w)) {
+        if (!seen.has(f.k)) {
+          seen.add(f.k);
+          forms.push({ f, w });
+        }
+      }
+    }
+    if (forms.length) {
+      box.append(h('div', 'sg-section', 'Grammar in this line'));
+      const row = h('div', 'sg-d-forms');
+      const ctx = { key: shownKey, sentence: cue.text, translation: a.tr, lang: a.lang };
+      for (const { f, w } of forms) {
+        const chip = h('button', 'sg-form', f.name || f.k);
+        if (deepTexts.has(guideCacheKey(f))) chip.classList.add('sg-saved');
+        chip.title = 'Open the full guide to this form';
+        chip.addEventListener('click', () => openPanelGuide(f, ctx, w));
+        row.append(chip);
+      }
+      box.append(row);
+    }
     if (words.length) {
       box.append(h('div', 'sg-section', 'Words'));
       for (const w of words) {
@@ -979,6 +1106,15 @@
         box.append(row);
       }
     }
+  }
+
+  function openPanelGuide(form, ctx, w) {
+    const p = ui.panel;
+    p.guide.dataset.k = form.k;
+    p.guideTitle.textContent = form.name || form.k;
+    p.guide.classList.add('sg-show');
+    p.guideBody.scrollTop = 0;
+    showGuide(p.guideBody, form, ctx, w);
   }
 
   function renderTranscript() {

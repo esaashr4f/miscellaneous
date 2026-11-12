@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SubGloss grammar library</title>
+  <link rel="stylesheet" href="grammar.css">
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <h1>Grammar library</h1>
+      <p class="sub" id="count"></p>
+      <input id="search" type="search" placeholder="Search forms and guides" autocomplete="off">
+      <div id="langs" class="langs"></div>
+      <nav id="list"></nav>
+    </aside>
+    <main id="view">
+      <div class="empty" id="empty">
+        <h2>No guides yet</h2>
+        <p>While watching, rest the pointer on a word with a grammar form (it shows a <span class="chip">Grammar</span> row), or click a form in the side panel. SubGloss writes a full guide to that form once and keeps it here.</p>
+      </div>
+    </main>
+  </div>
+  <script src="../shared/settings.js"></script>
+  <script src="../shared/lang.js"></script>
+  <script src="../shared/guide.js"></script>
+  <script src="../background/cache.js"></script>
+  <script src="grammar.js"></script>
+</body>
+</html>

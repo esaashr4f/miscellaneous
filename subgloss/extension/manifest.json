@@ -53,6 +53,7 @@
         "shared/settings.js",
         "shared/subtitles.js",
         "shared/lang.js",
+        "shared/guide.js",
         "content/content.js"
       ]
     }

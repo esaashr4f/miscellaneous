@@ -2,12 +2,25 @@
 
 A Firefox extension that turns the subtitles on any streaming site into a word-by-word breakdown, written by Claude.
 
-Above every word you see what it means in this sentence, the pieces it is built from with what each piece does (`食べ eat + させ make someone do + られ passive + た past`), and its reading. Under each phrase, a coloured bar shows its job in the sentence (topic, object, predicate…). Hovering a word pauses the video and opens a note; resting on it asks Claude for a longer explanation. A side panel shows the translation, a literal word-for-word rendering, the sentence structure, grammar notes and a clickable transcript.
+Above every word you see what it means in this sentence, the pieces it is built from with what each piece does (`食べ eat + させ make someone do + られ passive + た past`), and its reading. Under each phrase, a coloured bar shows its job in the sentence (topic, object, predicate…). Hovering a word pauses the video and opens a note. A side panel shows the translation, a literal word-for-word rendering, the sentence structure, grammar notes and a clickable transcript.
+
+## Grammar guides
+
+Every word is tagged with the grammar forms it carries (causative-passive させられる, connective -아서/어서, the 把 construction…). Rest the pointer on a word and SubGloss opens a complete guide to its main form; click any other form to switch. Each guide covers:
+
+- **What it is**, and the idea that ties its uses together
+- **How to make it** for every kind of word, irregulars and casual contractions included
+- **When to use it**: every common use, with examples
+- **When it seems to fit but doesn't**: the situations where you'd reach for it but need a different form, which form, and why, with contrasting examples
+- **Nuance and register**, **common mistakes**, and **where you met it**
+
+A guide is written once per form and saved, so the next time that form appears in any word it opens instantly at no cost. The side panel lists the forms in the current line (✓ marks ones you already have). Every guide is collected in the **Grammar library** (toolbar button → Grammar library), which you can search and filter by language. Clearing saved breakdowns in the options keeps your guides.
 
 Subtitles are sent to Claude in batches, ahead of the playhead, so most lines are already analyzed when they appear. Results are saved in Firefox, so rewatching costs nothing.
 
-![Hovering a word](docs/hover.png)
+![Hovering a word opens the guide to its grammar form](docs/hover.png)
 ![The side panel](docs/panel.png)
+![The grammar library](docs/library.png)
 
 ## Install
 
@@ -46,7 +59,7 @@ donkey.to and similar sites play the video in an embedded player from another do
 
 ## Cost
 
-Each line is analyzed once and saved. The default model is Claude Opus 5.5 with low thinking effort. Claude Haiku 5.5 is far cheaper, with simpler explanations. Claude Fable 5.2 is the most capable and the most expensive. The options page shows token usage and an estimated spend for each model. "Prepare ahead" (10 minutes by default) controls how far ahead SubGloss analyzes, so skipping through a video doesn't pay for lines you never watch.
+Each line is analyzed once and saved. Grammar guides are longer (roughly 500 to 900 words) and written at medium effort or above, but only once per form. The default model is Claude Opus 5.5 with low thinking effort. Claude Haiku 5.5 is far cheaper, with simpler explanations. Claude Fable 5.2 is the most capable and the most expensive. The options page shows token usage and an estimated spend for each model. "Prepare ahead" (10 minutes by default) controls how far ahead SubGloss analyzes, so skipping through a video doesn't pay for lines you never watch.
 
 ## Privacy
 
@@ -81,3 +94,5 @@ npm run package
 | `extension/content/content.js` | Finds the video, picks a track, prepares lines ahead and draws the overlay and panel |
 | `extension/shared/subtitles.js` | Parsers for VTT, SRT, ASS, TTML and json3 |
 | `extension/shared/lang.js` | Language guessing used to pick the right track |
+| `extension/shared/guide.js` | Renders grammar guides in the overlay and the library |
+| `extension/grammar/` | The grammar library page |

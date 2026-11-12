@@ -43,8 +43,8 @@ const ANALYSIS = {
   lines: [{
     i: 0, tr: 'I ate an apple.', lit: 'I [topic] apple [object] ate', pat: '[topic] 私は · [object] りんごを · [predicate] 食べた', notes: [],
     w: [
-      { s: '私', r: 'わたし', d: '私', pos: 'pronoun', m: 'I', p: [{ t: '私', g: 'I' }], c: 0, role: 'topic', n: '' },
-      { s: 'は', r: 'わ', d: 'は', pos: 'particle', m: 'topic marker', p: [{ t: 'は', g: 'topic marker' }], c: 0, role: 'topic', n: '' },
+      { s: '私', r: 'わたし', d: '私', pos: 'pronoun', m: 'I', p: [{ t: '私', g: 'I' }], c: 0, role: 'topic', n: '', g: [] },
+      { s: 'は', r: 'わ', d: 'は', pos: 'particle', m: 'topic marker', p: [{ t: 'は', g: 'topic marker' }], c: 0, role: 'topic', n: '', g: [{ k: 'ja.particle_wa', name: 'topic marker は' }] },
     ],
   }],
 };
@@ -115,6 +115,29 @@ test('explainWord streams text', async (t) => {
   const text = await SG.claude.explainWord(settings, { sentence: '私は', word: ANALYSIS.lines[0].w[1] }, (d) => deltas.push(d));
   assert.equal(deltas.length, 2);
   assert.equal(text, deltas.join(''));
+});
+
+test('explainForm asks for a full guide at medium effort or above', async (t) => {
+  let body = null;
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => (raw += c));
+    req.on('end', () => {
+      body = JSON.parse(raw);
+      sse(res, streamOf('## What it is\nThe causative-passive.'));
+    });
+  });
+  await new Promise((r) => server.listen(0, r));
+  t.after(() => server.close());
+  const settings = Object.assign({}, SG.DEFAULTS, { apiKey: 'sk-test', baseURL: `http://127.0.0.1:${server.address().port}`, effort: 'low', nativeLang: 'English' });
+  const text = await SG.claude.explainForm(settings, {
+    form: { k: 'ja.causative_passive', name: 'causative-passive させられる' }, lang: 'ja', sentence: '母に野菜を食べさせられた。', word: '食べさせられた',
+  }, () => {});
+  assert.match(text, /^## What it is/);
+  assert.equal(body.output_config.effort, 'medium');
+  assert.match(body.system, /## When it seems to fit but doesn't/);
+  assert.match(body.messages[0].content, /Identifier: ja\.causative_passive/);
+  assert.match(body.messages[0].content, /母に野菜を食べさせられた。/);
 });
 
 test('schema contains only features structured outputs accept', () => {

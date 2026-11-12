@@ -42,6 +42,12 @@
     });
   }
 
+  $('openLibrary').addEventListener('click', (e) => {
+    e.preventDefault();
+    browser.tabs.create({ url: browser.runtime.getURL('grammar/grammar.html') });
+    window.close();
+  });
+
   async function refresh() {
     const s = await browser.runtime.sendMessage({ type: 'status', tabId: tab.id });
     $('keyWarning').hidden = s.hasKey;

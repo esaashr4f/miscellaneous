@@ -120,22 +120,35 @@
     return out;
   }
 
-  // Streams a longer explanation of one word; onText receives each new piece of text.
-  async function explainWord(settings, req, onText) {
-    const { prompt } = SG;
+  // Streams plain text; onText receives each new piece as it arrives.
+  async function streamText(settings, system, user, maxTokens, effort, onText) {
     try {
-      const params = baseParams(settings, 4000);
-      params.system = prompt.deepSystemPrompt(settings.nativeLang);
-      params.messages = [{ role: 'user', content: prompt.deepUserMessage(req) }];
+      const params = baseParams(settings, maxTokens);
+      if (effort) params.output_config.effort = effort;
+      params.system = system;
+      params.messages = [{ role: 'user', content: user }];
       const stream = getClient(settings).beta.messages.stream(params);
       stream.on('text', (delta) => onText(delta));
       const message = await stream.finalMessage();
       recordUsage(message.model || settings.model, message.usage).catch(() => {});
-      if (message.stop_reason === 'refusal') throw new SubGlossError('refusal', 'Claude declined to explain this word.');
+      if (message.stop_reason === 'refusal') throw new SubGlossError('refusal', 'Claude declined to explain this.');
       return textOf(message);
     } catch (err) {
       throw describeError(err);
     }
+  }
+
+  // A longer explanation of one word in its sentence.
+  function explainWord(settings, req, onText) {
+    const { prompt } = SG;
+    return streamText(settings, prompt.deepSystemPrompt(settings.nativeLang), prompt.deepUserMessage(req), 4000, null, onText);
+  }
+
+  // A complete, reusable guide to a grammar form. Written once per form, so it gets more care.
+  function explainForm(settings, req, onText) {
+    const { prompt } = SG;
+    const effort = settings.effort === 'low' ? 'medium' : settings.effort;
+    return streamText(settings, prompt.guideSystemPrompt(settings.nativeLang), prompt.guideUserMessage(req), 12000, effort, onText);
   }
 
   // Cheapest possible round trip, used by the "Test key" button.
@@ -150,5 +163,5 @@
     }
   }
 
-  SG.claude = { analyzeLines, explainWord, testKey, describeError, SubGlossError };
+  SG.claude = { analyzeLines, explainWord, explainForm, testKey, describeError, SubGlossError };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
