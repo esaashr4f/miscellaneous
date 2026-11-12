@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SubGloss</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <strong>SubGloss</strong>
+    <label class="switch" title="Turn SubGloss on or off everywhere"><input id="enabled" type="checkbox"><span></span></label>
+  </header>
+  <div id="keyWarning" class="warn" hidden>No API key yet. <a href="#" id="openOptions2">Add one in the options.</a></div>
+  <div class="block">
+    <div class="label">This site</div>
+    <label class="check"><input id="siteEnabled" type="checkbox"> <span id="host"></span></label>
+  </div>
+  <div class="block">
+    <div class="label">Subtitles on this tab</div>
+    <div id="state" class="state">Nothing playing.</div>
+    <ul id="tracks" class="tracks"></ul>
+  </div>
+  <div id="error" class="err" hidden></div>
+  <div class="block">
+    <div class="label">Model</div>
+    <select id="model"></select>
+  </div>
+  <div id="spend" class="spend"></div>
+  <footer><a href="#" id="openOptions">Options</a></footer>
+  <script src="../shared/settings.js"></script>
+  <script src="../shared/lang.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+:root { --bg: #ffffff; --text: #1c1d22; --dim: #646875; --line: #e1e3e8; --accent: #b5651d; color-scheme: light dark; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1d1f25; --text: #ececf0; --dim: #9ea2ae; --line: #33363f; --accent: #e0954a; } }
+* { box-sizing: border-box; }
+body { width: 300px; margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 15px; }
+.block { padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.label { color: var(--dim); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.check { display: flex; align-items: center; gap: 8px; word-break: break-all; }
+.state { color: var(--dim); }
+.tracks { margin: 4px 0 0; padding: 0; list-style: none; }
+.tracks li { padding: 2px 0; }
+.tracks li.on { font-weight: 600; }
+select { width: 100%; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--text); font: inherit; }
+.warn, .err { margin: 8px 12px 0; padding: 6px 8px; border-radius: 5px; font-size: 12px; }
+.warn { background: rgba(255, 196, 77, 0.18); }
+.err { background: rgba(214, 69, 69, 0.15); }
+.spend { padding: 8px 12px; color: var(--dim); font-size: 12px; }
+footer { padding: 8px 12px 10px; }
+a { color: var(--accent); }
+.switch { position: relative; width: 34px; height: 20px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; border-radius: 10px; background: var(--line); cursor: pointer; transition: background 0.15s; }
+.switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(14px); }

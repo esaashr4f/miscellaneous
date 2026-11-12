@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SubGloss options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>SubGloss</h1>
+    <p class="lede">Word-by-word subtitle breakdowns on any streaming site, written by Claude.</p>
+
+    <section>
+      <h2>Claude API</h2>
+      <label class="field">
+        <span>Anthropic API key</span>
+        <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
+        <small>Create one at console.anthropic.com. It is stored only in this Firefox profile and sent only to the Anthropic API.</small>
+      </label>
+      <div class="row">
+        <button id="testKey" type="button">Test key</button>
+        <span id="testResult" class="note"></span>
+      </div>
+      <label class="field">
+        <span>Model</span>
+        <select id="model"></select>
+        <small id="modelNote"></small>
+      </label>
+      <label class="field">
+        <span>Thinking effort for breakdowns</span>
+        <select id="effort">
+          <option value="low">Low: fastest and cheapest (recommended)</option>
+          <option value="medium">Medium</option>
+          <option value="high">High: slower, for difficult dialogue</option>
+        </select>
+      </label>
+      <details>
+        <summary>Advanced</summary>
+        <label class="field">
+          <span>API base URL</span>
+          <input id="baseURL" type="url" spellcheck="false" placeholder="https://api.anthropic.com">
+          <small>Leave empty unless you route requests through your own proxy.</small>
+        </label>
+      </details>
+    </section>
+
+    <section>
+      <h2>Languages</h2>
+      <label class="field">
+        <span>Explanations are written in</span>
+        <input id="nativeLang" type="text" placeholder="English">
+        <small>Subtitles already in this language are not analyzed unless you pick them yourself.</small>
+      </label>
+      <div class="field">
+        <span>Languages you are learning, first choice first</span>
+        <input id="learning" type="text" placeholder="ja, ko, zh">
+        <small>When a video has several subtitle tracks, SubGloss uses the first of these it finds. Codes: ja Japanese, ko Korean, zh Chinese, th Thai, vi Vietnamese, id Indonesian, hi Hindi, es, fr, de, it, pt, ru…</small>
+      </div>
+    </section>
+
+    <section>
+      <h2>Display</h2>
+      <label class="check"><input id="showMeaning" type="checkbox"> Meaning of each word above it</label>
+      <label class="check"><input id="showParts" type="checkbox"> Word pieces with their glosses (x + y + z)</label>
+      <label class="check"><input id="showReading" type="checkbox"> Pronunciation (furigana, pinyin, romanization)</label>
+      <label class="check"><input id="showRoles" type="checkbox"> Sentence roles (subject, object, predicate…) under the words</label>
+      <label class="check"><input id="showTranslation" type="checkbox"> Translation under the line</label>
+      <label class="check"><input id="hideNative" type="checkbox"> Hide the site's own subtitles while SubGloss shows them</label>
+      <label class="field">
+        <span>Text size</span>
+        <input id="fontScale" type="range" min="0.6" max="1.8" step="0.05">
+        <small id="fontScaleValue"></small>
+      </label>
+    </section>
+
+    <section>
+      <h2>Hover</h2>
+      <label class="check"><input id="hoverPause" type="checkbox"> Pause the video while the pointer is on a word</label>
+      <label class="check"><input id="resumeOnLeave" type="checkbox"> Resume playing when the pointer leaves the subtitles</label>
+      <label class="check"><input id="autoDeep" type="checkbox"> Ask Claude for a longer explanation when you rest on a word (costs a request per word)</label>
+    </section>
+
+    <section>
+      <h2>Preparing ahead</h2>
+      <label class="field">
+        <span>Prepare subtitles this far ahead of what you are watching</span>
+        <select id="lookaheadMin">
+          <option value="3">3 minutes</option>
+          <option value="10">10 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="0">The whole video at once</option>
+        </select>
+        <small>Further ahead means seeking rarely waits, but you pay for lines you may never watch.</small>
+      </label>
+      <label class="field">
+        <span>Lines per request</span>
+        <input id="chunkSize" type="number" min="2" max="25">
+      </label>
+      <label class="field">
+        <span>Requests at the same time</span>
+        <input id="concurrency" type="number" min="1" max="8">
+      </label>
+    </section>
+
+    <section>
+      <h2>Sites</h2>
+      <label class="check"><input id="enabled" type="checkbox"> SubGloss is on</label>
+      <div class="field">
+        <span>Turned off on these sites</span>
+        <ul id="disabledHosts" class="hosts"></ul>
+        <small>Turn SubGloss off for the current site from the toolbar button.</small>
+      </div>
+    </section>
+
+    <section>
+      <h2>Usage and cache</h2>
+      <div id="usage" class="usage"></div>
+      <div class="row">
+        <button id="resetUsage" type="button">Reset usage counter</button>
+        <button id="clearCache" type="button">Clear saved breakdowns</button>
+        <span id="cacheResult" class="note"></span>
+      </div>
+      <small>Breakdowns are saved, so rewatching never costs anything. The estimate uses list prices and can differ from your bill.</small>
+    </section>
+
+    <section>
+      <h2>Keys while watching</h2>
+      <table class="keys">
+        <tr><td><kbd>A</kbd> / <kbd>D</kbd></td><td>Previous / next line</td></tr>
+        <tr><td><kbd>S</kbd></td><td>Replay the current line</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Open or close the side panel</td></tr>
+        <tr><td><kbd>H</kbd></td><td>Hide or show SubGloss subtitles</td></tr>
+      </table>
+    </section>
+    <p id="saved" class="saved">Saved</p>
+  </main>
+  <script src="../shared/settings.js"></script>
+  <script src="../shared/lang.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
