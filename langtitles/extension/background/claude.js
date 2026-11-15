@@ -151,6 +151,13 @@
     return streamText(settings, prompt.guideSystemPrompt(settings.nativeLang), prompt.guideUserMessage(req), 12000, effort, onText);
   }
 
+  // A complete, reusable guide to one word: meanings, how it is built, where it fits and where it doesn't.
+  function explainWordGuide(settings, req, onText) {
+    const { prompt } = SG;
+    const effort = settings.effort === 'low' ? 'medium' : settings.effort;
+    return streamText(settings, prompt.wordGuideSystemPrompt(settings.nativeLang), prompt.wordGuideUserMessage(req), 12000, effort, onText);
+  }
+
   // A structured dictionary entry for one kanji or hanzi.
   async function charEntry(settings, req) {
     const { prompt } = SG;
@@ -209,5 +216,5 @@
     }
   }
 
-  SG.claude = { analyzeLines, explainWord, explainForm, charEntry, episodeWords, testKey, describeError, LangtitlesError };
+  SG.claude = { analyzeLines, explainWord, explainForm, explainWordGuide, charEntry, episodeWords, testKey, describeError, LangtitlesError };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

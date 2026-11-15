@@ -493,3 +493,5 @@ langtitles-root .sg-wl-top .sg-say, langtitles-root .sg-wl-top .sg-kw { font-siz
 langtitles-root .sg-wl-m { color: #dcdde3; font-size: 12.5px; }
 langtitles-root .sg-wl-ex { all: unset; display: block; margin-top: 2px; color: var(--sg-dim); font-size: 12px; cursor: pointer; }
 langtitles-root .sg-wl-ex:hover { color: var(--sg-gloss); }
+langtitles-root .sg-form-word { border-color: rgba(159, 215, 255, 0.5); color: var(--sg-read); }
+langtitles-root .sg-form-word.sg-on { background: rgba(159, 215, 255, 0.18); border-color: var(--sg-read); }

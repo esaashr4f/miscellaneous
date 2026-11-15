@@ -140,6 +140,28 @@ test('explainForm asks for a full guide at medium effort or above', async (t) =>
   assert.match(body.messages[0].content, /母に野菜を食べさせられた。/);
 });
 
+test('explainWordGuide asks where the word fits and where it does not', async (t) => {
+  let body = null;
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => (raw += c));
+    req.on('end', () => {
+      body = JSON.parse(raw);
+      sse(res, streamOf('## What it means\nMother.'));
+    });
+  });
+  await new Promise((r) => server.listen(0, r));
+  t.after(() => server.close());
+  const settings = Object.assign({}, SG.DEFAULTS, { apiKey: 'sk-test', baseURL: `http://127.0.0.1:${server.address().port}`, nativeLang: 'English' });
+  const text = await SG.claude.explainWordGuide(settings, { word: '母', dict: '母', reading: 'はは', pos: 'noun', meaning: 'my mother', lang: 'ja', sentence: '母に野菜を食べさせられた。' }, () => {});
+  assert.match(text, /^## What it means/);
+  assert.match(body.system, /## Where it doesn't fit, and what to use instead/);
+  assert.match(body.system, /jukujikun/);
+  assert.match(body.system, /Never use romanization/);
+  assert.match(body.messages[0].content, /Dictionary form: 母/);
+  assert.equal(body.output_config.effort, 'medium');
+});
+
 test('schema contains only features structured outputs accept', () => {
   const walk = (s) => {
     if (s.type === 'object') {

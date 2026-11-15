@@ -161,6 +161,12 @@
       card.append(pieces);
     }
     if (w.n) card.append(h('div', 'note', w.n));
+    const wg = h('a', 'chip', '📖 Word guide');
+    wg.href = '../grammar/grammar.html#' + encodeURIComponent(`word.${item.lang}.${item.text}`);
+    wg.title = 'Opens the word guide, if you have opened it while watching';
+    const guideChips = h('div', 'chips');
+    guideChips.append(wg);
+    card.append(guideChips);
     if (Array.isArray(w.g) && w.g.length) {
       const chips = h('div', 'chips');
       for (const f of w.g) {

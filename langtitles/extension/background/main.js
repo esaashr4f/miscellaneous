@@ -129,9 +129,10 @@
       }
     };
     try {
-      const text = await claude.explainForm(settings, req, (delta) => each((w) => w.port.postMessage({ type: 'deepDelta', reqId: w.reqId, delta })));
+      const writer = req.kind === 'wordguide' ? claude.explainWordGuide : claude.explainForm;
+      const text = await writer(settings, req, (delta) => each((w) => w.port.postMessage({ type: 'deepDelta', reqId: w.reqId, delta })));
       const entry = {
-        key, k: req.form.k, name: req.form.name || req.form.k, lang: req.lang || '', nativeLang: settings.nativeLang,
+        key, k: req.form.k, name: req.form.name || req.form.k, kind: req.kind === 'wordguide' ? 'word' : 'grammar', lang: req.lang || '', nativeLang: settings.nativeLang,
         text, sentence: req.sentence || '', word: req.word || '', model: settings.model, savedAt: Date.now(),
       };
       cache.putMany('guides', [[key, entry]]).catch(() => {});
@@ -144,7 +145,7 @@
   }
 
   async function explain(req, port) {
-    if (req.kind === 'guide' && req.form && req.form.k) return explainGuide(req, port);
+    if ((req.kind === 'guide' || req.kind === 'wordguide') && req.form && req.form.k) return explainGuide(req, port);
     await ready;
     const key = [fingerprint(), 'deep', req.key, req.word && req.word.s, req.wordIndex].join('|');
     const hit = (await cache.getMany('deep', [key])).get(key);

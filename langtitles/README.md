@@ -51,6 +51,20 @@ Streaming sites often have no subtitles in the language you are learning. Langti
 - **By hand:** press **G** → **Find subtitles** to see every match, best first, and pick another file.
 - **Limits:** OpenSubtitles allows 5 downloads a day, or 20 if you add your username and password; SubDL and Jimaku are more generous. Every downloaded file is saved, so rewatching uses no downloads.
 
+## Word guides
+
+Every word has a 📖 guide, opened from the **Guides** row of the hover popup (resting on a word opens it automatically unless the word carries a grammar form), or from 📖 in the side panel's word list and in Episode words. It covers:
+
+- **What it means**: each common sense with examples, and which one is meant in this line
+- **How it's built**: the characters or parts and what each contributes, the pattern behind the compound with other words built the same way, and for Japanese whether the reading follows the characters or belongs to the whole word (昨日 is read きのう as a unit, not き + のう; it is also さくじつ in formal speech)
+- **Where it fits**: who says it, to whom, in what situations, and its usual collocations
+- **Where it doesn't fit, and what to use instead**: every word you might confuse it with, such as 母 vs お母さん, 母親, ママ, おふくろ, with when to use each and contrasting examples
+- **Nuance and register**, **common mistakes**, and **where you met it**
+
+Like grammar guides, each word guide is written once and saved, so the word opens instantly everywhere afterwards.
+
+![A word guide for 母](docs/word-guide.png)
+
 ## Grammar guides
 
 Every word is tagged with the grammar forms it carries (causative-passive させられる, connective -아서/어서, the 把 construction…). Rest the pointer on a word and Langtitles opens a complete guide to its main form; click any other form to switch. Each guide covers:
@@ -61,7 +75,7 @@ Every word is tagged with the grammar forms it carries (causative-passive させ
 - **When it seems to fit but doesn't**: the situations where you'd reach for it but need a different form, which form, and why, with contrasting examples
 - **Nuance and register**, **common mistakes**, and **where you met it**
 
-A guide is written once per form and saved, so the next time that form appears in any word it opens instantly at no cost. The side panel lists the forms in the current line (✓ marks ones you already have). Every guide is collected in the **Grammar library** (toolbar button → Grammar library), which you can search and filter by language. Clearing saved breakdowns in the options keeps your guides.
+A guide is written once per form and saved, so the next time that form appears in any word it opens instantly at no cost. The side panel lists the forms in the current line (✓ marks ones you already have). Every guide, for words and grammar, is collected in the **Library** (toolbar button → Library), which you can search and filter by kind and language. Clearing saved breakdowns in the options keeps your guides.
 
 Subtitles are sent to Claude in batches, ahead of the playhead, so most lines are already analyzed when they appear. Results are saved in Firefox, so rewatching costs nothing.
 

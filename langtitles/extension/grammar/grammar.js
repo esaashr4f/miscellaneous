@@ -1,11 +1,13 @@
-// Grammar library: every guide Langtitles has written, readable and searchable after watching.
+// Library: every word and grammar guide Langtitles has written, readable and searchable after watching.
 (async function () {
   'use strict';
   const SG = globalThis.SG;
   const $ = (id) => document.getElementById(id);
   let guides = [];
   let lang = '';
+  let kind = '';
   let current = '';
+  const kindOf = (g) => g.kind || (String(g.k).startsWith('word.') ? 'word' : 'grammar');
 
   function h(tag, cls, text) {
     const e = document.createElement(tag);
@@ -16,7 +18,18 @@
 
   async function load() {
     guides = (await SG.cache.getAll('guides')).sort((a, b) => b.savedAt - a.savedAt);
-    $('count').textContent = guides.length === 1 ? '1 form' : `${guides.length} forms`;
+    const nWords = guides.filter((g) => kindOf(g) === 'word').length;
+    $('count').textContent = `${nWords} word${nWords === 1 ? '' : 's'} · ${guides.length - nWords} grammar form${guides.length - nWords === 1 ? '' : 's'}`;
+    const kinds = $('kinds');
+    kinds.textContent = '';
+    for (const [code, name] of [['', 'All'], ['word', 'Words'], ['grammar', 'Grammar']]) {
+      const b = h('button', code === kind ? 'on' : '', name);
+      b.addEventListener('click', () => {
+        kind = code;
+        load();
+      });
+      kinds.append(b);
+    }
     const langs = [...new Set(guides.map((g) => SG.lang.langCode(g.lang || (g.k || '').split('.')[0])))];
     const box = $('langs');
     box.textContent = '';
@@ -37,6 +50,7 @@
   }
 
   function matches(g, q) {
+    if (kind && kindOf(g) !== kind) return false;
     if (lang && SG.lang.langCode(g.lang || g.k.split('.')[0]) !== lang) return false;
     if (!q) return true;
     return [g.name, g.k, g.text, g.sentence].join('\n').toLowerCase().includes(q);
@@ -49,7 +63,7 @@
     for (const g of guides.filter((x) => matches(x, q))) {
       const a = h('a', g.k === current ? 'on' : '');
       a.href = '#' + encodeURIComponent(g.k);
-      a.append(document.createTextNode(g.name || g.k), h('small', '', SG.lang.langName(g.lang || g.k.split('.')[0])));
+      a.append(document.createTextNode((kindOf(g) === 'word' ? '📖 ' : '') + (g.name || g.k)), h('small', '', SG.lang.langName(g.lang || g.k.split('.')[0]) + (kindOf(g) === 'word' ? ' · word' : ' · grammar')));
       a.addEventListener('click', (e) => {
         e.preventDefault();
         history.replaceState(null, '', a.href);
@@ -74,7 +88,7 @@
     head.append(meta);
     const tools = h('div', 'tools');
     const del = h('button', '', 'Delete this guide');
-    del.title = 'The next time you meet this form, Langtitles writes a fresh guide';
+    del.title = 'The next time you meet it, Langtitles writes a fresh guide';
     del.addEventListener('click', async () => {
       await SG.cache.remove('guides', g.key);
       current = '';

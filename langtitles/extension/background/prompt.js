@@ -202,6 +202,45 @@ Two or three sentences on what the form is doing in the line where the learner m
 Formatting: plain text only, apart from the "## " headings. Start a line with "- " for a list item. Put each example sentence on its own line, followed by " — " and its translation. Be thorough without padding; most guides need 500 to 900 words. Accuracy matters more than coverage: state only rules you are sure of, and say so when usage varies between speakers or regions.`;
   }
 
+  function wordGuideSystemPrompt(nativeLang) {
+    return `A language learner watching a show has just met a word. They want to understand it completely, once: what it means, how it is built, exactly where it fits and where it does not, so that they can use it correctly without needing many more encounters to work the rules out. They read ${nativeLang}; write in ${nativeLang}, quoting the language being learned with a reading in brackets after anything a learner might not be able to pronounce (hiragana for Japanese, pinyin with tone marks for Chinese). Never use romanization.
+
+Write a complete guide to the word under these headings, each on its own line starting with "## ":
+
+## What it means
+The core meaning in one sentence. Then each common sense as a list item, with an example sentence and its translation. Say which sense is used where the learner met the word.
+
+## How it's built
+The parts the word is made of and what each contributes: for a compound, each character or element, how they combine, and the pattern behind it if it is a productive one (with two or three other words built the same way); for a derived or inflected word, its stem and affixes. For Japanese, say whether the reading follows the individual characters (on'yomi or kun'yomi) or belongs to the word as a whole (jukujikun: 昨日 is read きのう as a unit, not き + のう), and give any other reading of the same spelling and when it is used (昨日 also さくじつ, in formal speech and writing). For a simple word with nothing to break down, say so in one line.
+
+## Where it fits
+Who says it, to whom, and in what situations. Its usual collocations and sentence patterns, each with an example and its translation.
+
+## Where it doesn't fit, and what to use instead
+Every word a learner might confuse it with or use in its place: near-synonyms, more or less formal or polite variants, words for the same thing seen from another side (for example, for 母: お母さん, 母親, ママ, おふくろ, and which one to use when talking about your own mother to others, addressing her, or talking about someone else's mother). For each: when to use it instead, why, and a pair of example sentences contrasting the two.
+
+## Nuance and register
+How it sounds: politeness, formality, age, gender, region, warmth or coldness, spoken versus written.
+
+## Common mistakes
+The mistakes learners actually make with it, each with the correction.
+
+## Where you met it
+Two or three sentences on what the word means and why this word was chosen in the line where the learner met it.
+
+Formatting: plain text only, apart from the "## " headings. Start a line with "- " for a list item. Put each example sentence on its own line, followed by " — " and its translation. Be thorough without padding; most guides need 500 to 900 words, a simple word fewer. Accuracy matters more than coverage: state only what you are sure of, and say so when usage varies between speakers or regions.`;
+  }
+
+  function wordGuideUserMessage(req) {
+    return `Word as it appeared: ${req.word || ''}
+Dictionary form: ${req.dict || req.word || ''}
+Reading: ${req.reading || ''}
+Part of speech: ${req.pos || ''}
+Meaning there: ${req.meaning || ''}
+Language: ${req.lang || 'unknown'}
+Line where the learner met it: ${req.sentence || ''}`;
+  }
+
   function guideUserMessage(req) {
     const f = req.form || {};
     return `Form: ${f.name || f.k}
@@ -318,5 +357,5 @@ In the line: ${req.sentence || ''}`;
 List the words in the dictionary form, counting every inflected form of a word as the same word. Leave out particles, grammatical endings, interjections, sound effects and people's names; keep place names and other proper nouns only when they need explaining. Order the list by how many lines use the word, most first, and include up to 150 words. For each: d the dictionary form, r its reading (hiragana for Japanese words with kanji, pinyin with tone marks for Chinese, an empty string otherwise; never romanization), m the meaning it has in this episode, pos its part of speech, count the number of lines that use it, line the number of the line that shows it most clearly.`;
   }
 
-  SG.prompt = { WORDS_VERSION, WORDS_SCHEMA, wordsSystemPrompt, PROMPT_VERSION, GUIDE_VERSION, CHAR_VERSION, CHAR_SCHEMA, charSystemPrompt, charUserMessage, guideSystemPrompt, guideUserMessage, ROLES, ANALYSIS_SCHEMA, systemPrompt, userMessage, deepSystemPrompt, deepUserMessage };
+  SG.prompt = { wordGuideSystemPrompt, wordGuideUserMessage, WORDS_VERSION, WORDS_SCHEMA, wordsSystemPrompt, PROMPT_VERSION, GUIDE_VERSION, CHAR_VERSION, CHAR_SCHEMA, charSystemPrompt, charUserMessage, guideSystemPrompt, guideUserMessage, ROLES, ANALYSIS_SCHEMA, systemPrompt, userMessage, deepSystemPrompt, deepUserMessage };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -611,7 +611,7 @@
     const guideHead = h('div', 'sg-pguide-head');
     const guideTitle = h('span', 'sg-pguide-title');
     const guideLib = h('button', 'sg-btn', 'Library');
-    guideLib.title = 'All grammar guides you have collected';
+    guideLib.title = 'All the guides you have collected';
     guideLib.addEventListener('click', () => post({ type: 'openLibrary', k: guide.dataset.k || '' }));
     const guideBack = h('button', 'sg-btn', 'Back');
     guideBack.addEventListener('click', () => guide.classList.remove('sg-show'));
@@ -999,24 +999,34 @@
 
     const forms = formsOf(w);
     const deep = h('div', 'sg-pop-deep');
-    if (forms.length) {
+    // Guides: one for the word itself (what it means, how it's built, where it fits and
+    // where it doesn't), and one for each grammar form it carries.
+    const wordForm = wordGuideForm(w, ctx.lang);
+    const guides = (isTrivial(w) && forms.length ? [] : [{ f: wordForm, word: true }]).concat(forms.map((f) => ({ f, word: false })));
+    const firstGuide = forms.length ? guides.find((g) => !g.word) : guides[0];
+    if (guides.length) {
       const row = h('div', 'sg-pop-forms');
-      row.append(h('span', 'sg-pop-forms-label', 'Grammar'));
-      forms.forEach((f, i) => {
-        const chip = h('button', 'sg-form' + (i === 0 ? ' sg-on' : ''), f.name || f.k);
-        chip.title = 'Full guide to this form';
+      row.append(h('span', 'sg-pop-forms-label', 'Guides'));
+      for (const g of guides) {
+        const chip = h('button', 'sg-form' + (g.word ? ' sg-form-word' : '') + (g === firstGuide ? ' sg-on' : ''), g.word ? '📖 ' + (w.d || w.s) : g.f.name || g.f.k);
+        chip.title = g.word ? 'Everything about this word: meanings, how it is built, where it fits and where it does not' : 'Full guide to this grammar form';
+        chip.dataset.k = g.f.k;
         chip.addEventListener('click', () => {
           clearTimeout(deepTimer);
           for (const c of pop.querySelectorAll('.sg-form, .sg-char')) c.classList.toggle('sg-on', c === chip);
           pop.classList.add('sg-wide');
-          showGuide(deep, f, ctx, w);
+          if (g.word) showWordGuide(deep, w, ctx);
+          else showGuide(deep, g.f, ctx, w);
           placePop(tok);
         });
         row.append(chip);
-      });
+      }
       const lib = h('button', 'sg-btn sg-lib', 'Library');
-      lib.title = 'All grammar guides you have collected';
-      lib.addEventListener('click', () => post({ type: 'openLibrary', k: currentFormKey(row, forms) }));
+      lib.title = 'All the guides you have collected';
+      lib.addEventListener('click', () => {
+        const on = row.querySelector('.sg-form.sg-on');
+        post({ type: 'openLibrary', k: on ? on.dataset.k : '' });
+      });
       row.append(lib);
       pop.append(row);
     }
@@ -1040,24 +1050,20 @@
     }
     pop.append(deep);
 
-    const wordKey = 'word|' + ctx.key + '|' + index;
-    const first = forms[0];
     const ask = () => {
-      if (first) {
-        pop.classList.add('sg-wide');
-        showGuide(deep, first, ctx, w);
-        placePop(tok);
-      } else {
-        showWordExplanation(deep, wordKey, w, index, ctx);
-      }
+      if (!firstGuide) return;
+      pop.classList.add('sg-wide');
+      if (firstGuide.word) showWordGuide(deep, w, ctx);
+      else showGuide(deep, firstGuide.f, ctx, w);
+      placePop(tok);
     };
-    const ready = first ? deepTexts.has(guideCacheKey(first)) : deepTexts.has(wordKey);
+    const ready = firstGuide && deepTexts.has(firstGuide.word ? guideCacheKey(wordForm) : guideCacheKey(firstGuide.f));
     if (ready) {
       ask();
-    } else if (settings.hasKey && settings.autoDeep) {
+    } else if (settings.hasKey && settings.autoDeep && firstGuide) {
       deepTimer = setTimeout(ask, 650);
-    } else if (settings.hasKey) {
-      const more = h('button', 'sg-btn', first ? 'Full guide to ' + (first.name || first.k) : 'Explain more');
+    } else if (settings.hasKey && firstGuide) {
+      const more = h('button', 'sg-btn', firstGuide.word ? 'Word guide' : 'Full guide to ' + (firstGuide.f.name || firstGuide.f.k));
       more.addEventListener('click', () => {
         more.remove();
         ask();
@@ -1087,12 +1093,6 @@
   function formsOf(w) {
     const seen = new Set();
     return (Array.isArray(w.g) ? w.g : []).filter((f) => f && f.k && !seen.has(f.k) && seen.add(f.k));
-  }
-
-  function currentFormKey(row, forms) {
-    const chips = Array.from(row.querySelectorAll('.sg-form'));
-    const at = chips.findIndex((c) => c.classList.contains('sg-on'));
-    return (forms[at] || forms[0] || {}).k || '';
   }
 
   function guideCacheKey(form) {
@@ -1127,21 +1127,26 @@
     const target = { el, cacheKey, text: '', guide };
     deepByReq.set(reqId, target);
     deepByKey.set(cacheKey, target);
-    el.textContent = guide ? 'Writing a guide to this form… (saved once written, so it opens instantly next time)' : 'Explaining…';
+    el.textContent = guide ? `Writing a guide to ${payload.kind === 'wordguide' ? 'this word' : 'this form'}… (saved once written, so it opens instantly next time)` : 'Explaining…';
     el.classList.add('sg-loading');
     post(Object.assign({ type: 'deep', reqId }, payload));
+  }
+
+  function wordGuideForm(w, lang) {
+    const d = w.d || w.s;
+    return { k: `word.${lang || 'und'}.${d}`, name: d + (w.r && w.d === w.s ? ` (${w.r})` : '') };
+  }
+
+  function showWordGuide(el, w, ctx) {
+    const form = wordGuideForm(w, ctx.lang);
+    startDeep(el, guideCacheKey(form), true, {
+      kind: 'wordguide', form, lang: ctx.lang, sentence: ctx.sentence, word: w.s, dict: w.d, reading: w.r, pos: w.pos, meaning: w.m,
+    });
   }
 
   function showGuide(el, form, ctx, w) {
     startDeep(el, guideCacheKey(form), true, {
       kind: 'guide', form: { k: form.k, name: form.name }, lang: ctx.lang, sentence: ctx.sentence, word: w.s,
-    });
-  }
-
-  function showWordExplanation(el, cacheKey, w, index, ctx) {
-    startDeep(el, cacheKey, false, {
-      key: ctx.key, wordIndex: index, sentence: ctx.sentence, translation: ctx.translation,
-      word: { s: w.s, r: w.r, d: w.d, pos: w.pos, m: w.m, p: w.p, n: w.n },
     });
   }
 
@@ -1248,7 +1253,11 @@
         head.append(h('span', 'sg-word-s', w.s));
         if (w.r && !sameText(w.r, w.s)) head.append(h('span', 'sg-word-r', w.r));
         head.append(h('span', 'sg-word-m', w.m || ''));
-        head.append(starButton('word', langCode(a.lang), w.d || w.s, () => wordItem(w, { sentence: cue.text, translation: a.tr, lang: langCode(a.lang), time: cue.start + (active() ? active().offset : 0) })));
+        const wctx = { sentence: cue.text, translation: a.tr, lang: langCode(a.lang), time: cue.start + (active() ? active().offset : 0) };
+        const gb = h('button', 'sg-say', '📖');
+        gb.title = 'Word guide';
+        gb.addEventListener('click', () => openPanelGuide(wordGuideForm(w, wctx.lang), wctx, w, true));
+        head.append(gb, starButton('word', langCode(a.lang), w.d || w.s, () => wordItem(w, wctx)));
         row.append(head);
         const parts = Array.isArray(w.p) ? w.p : [];
         if (parts.length > 1) row.append(h('div', 'sg-word-p', parts.map((p) => `${p.t} ${p.g}`).join('  +  ')));
@@ -1258,15 +1267,16 @@
     }
   }
 
-  function openPanelGuide(form, ctx, w) {
+  function openPanelGuide(form, ctx, w, isWord) {
     const p = ui.panel;
     p.find.classList.remove('sg-show');
     p.words.classList.remove('sg-show');
     p.guide.dataset.k = form.k;
-    p.guideTitle.textContent = form.name || form.k;
+    p.guideTitle.textContent = isWord ? '📖 ' + (form.name || form.k) : form.name || form.k;
     p.guide.classList.add('sg-show');
     p.guideBody.scrollTop = 0;
-    showGuide(p.guideBody, form, ctx, w);
+    if (isWord) showWordGuide(p.guideBody, w, ctx);
+    else showGuide(p.guideBody, form, ctx, w);
   }
 
   function renderTranscript() {
@@ -1669,7 +1679,10 @@
         const ctx = { sentence: line ? line.text : '', translation: '', lang, time: line ? line.start + t.offset : 0 };
         const kn = knownWordButton(fake, lang);
         kn.addEventListener('click', () => setTimeout(draw, 50));
-        top.append(speakButton(x.d, lang), kn, starButton('word', lang, x.d, () => wordItem(fake, ctx)));
+        const gb = h('button', 'sg-say', '📖');
+        gb.title = 'Word guide';
+        gb.addEventListener('click', () => openPanelGuide(wordGuideForm(fake, lang), ctx, fake, true));
+        top.append(speakButton(x.d, lang), gb, kn, starButton('word', lang, x.d, () => wordItem(fake, ctx)));
         row.append(top, h('div', 'sg-wl-m', [x.m, x.pos].filter(Boolean).join(' · ')));
         if (line) {
           const ex = h('button', 'sg-wl-ex', line.text);

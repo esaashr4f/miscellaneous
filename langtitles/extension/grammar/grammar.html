@@ -3,22 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Langtitles grammar library</title>
+  <title>Langtitles library</title>
   <link rel="stylesheet" href="grammar.css">
 </head>
 <body>
   <div class="layout">
     <aside>
-      <h1>Grammar library</h1>
+      <h1>Library</h1>
       <p class="sub" id="count"></p>
       <input id="search" type="search" placeholder="Search forms and guides" autocomplete="off">
+      <div id="kinds" class="langs"></div>
       <div id="langs" class="langs"></div>
       <nav id="list"></nav>
     </aside>
     <main id="view">
       <div class="empty" id="empty">
         <h2>No guides yet</h2>
-        <p>While watching, rest the pointer on a word with a grammar form (it shows a <span class="chip">Grammar</span> row), or click a form in the side panel. Langtitles writes a full guide to that form once and keeps it here.</p>
+        <p>While watching, rest the pointer on a word, or click a guide in its <span class="chip">Guides</span> row: 📖 for the word itself, or one of its grammar forms. Langtitles writes each guide once and keeps it here.</p>
       </div>
     </main>
   </div>
