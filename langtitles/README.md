@@ -88,7 +88,7 @@ You need Firefox 140 or newer and an Anthropic API key from [console.anthropic.c
 2. Langtitles picks them up and starts preparing them. The toolbar button shows how many lines are ready.
 3. Hover any word to pause and read more. Move the pointer away and the video resumes.
 
-Keys while a video is playing: **A** / **D** previous / next line, **S** replay the line, **G** side panel, **H** hide Langtitles subtitles, **R** furigana / pinyin on or off, **S** replay the line slowed down, **L** loop it.
+Keys while a video is playing: **A** / **D** previous / next line, **G** side panel, **H** hide Langtitles subtitles, **R** furigana / pinyin on or off, **S** replay the line slowed down, **L** loop it.
 
 ### Where the subtitles come from
 
