@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Word bank</title>
+  <link rel="stylesheet" href="bank.css">
+</head>
+<body>
+  <header>
+    <div class="top">
+      <h1>Word bank</h1>
+      <div class="actions">
+        <button id="exportAnki" type="button">Export for Anki</button>
+        <button id="backup" type="button" class="secondary">Back up</button>
+        <label class="secondary filebtn">Restore<input id="restore" type="file" accept=".json,application/json" hidden></label>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button data-tab="word" class="on" role="tab">Words <span id="nWord"></span></button>
+      <button data-tab="char" role="tab">Characters <span id="nChar"></span></button>
+      <button data-tab="known" role="tab">Known characters <span id="nKnown"></span></button>
+    </nav>
+    <div class="filters" id="filters">
+      <input id="search" type="search" placeholder="Search" autocomplete="off">
+      <select id="lang"><option value="">All languages</option></select>
+      <select id="sort">
+        <option value="new">Newest first</option>
+        <option value="old">Oldest first</option>
+        <option value="az">A to Z</option>
+      </select>
+    </div>
+  </header>
+  <main id="list"></main>
+  <p id="toast" class="toast"></p>
+  <script src="../shared/settings.js"></script>
+  <script src="../shared/lang.js"></script>
+  <script src="../shared/ruby.js"></script>
+  <script src="../background/cache.js"></script>
+  <script src="bank.js"></script>
+</body>
+</html>

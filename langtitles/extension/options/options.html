@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Langtitles options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>Langtitles</h1>
+    <p class="lede">Word-by-word subtitle breakdowns on any streaming site, written by Claude.</p>
+
+    <section>
+      <h2>Claude API</h2>
+      <label class="field">
+        <span>Anthropic API key</span>
+        <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
+        <small>Create one at console.anthropic.com. It is stored only in this Firefox profile and sent only to the Anthropic API.</small>
+      </label>
+      <div class="row">
+        <button id="testKey" type="button">Test key</button>
+        <span id="testResult" class="note"></span>
+      </div>
+      <label class="field">
+        <span>Model</span>
+        <select id="model"></select>
+        <small id="modelNote"></small>
+      </label>
+      <label class="field">
+        <span>Thinking effort for breakdowns</span>
+        <select id="effort">
+          <option value="low">Low: fastest and cheapest (recommended)</option>
+          <option value="medium">Medium</option>
+          <option value="high">High: slower, for difficult dialogue</option>
+        </select>
+      </label>
+      <details>
+        <summary>Advanced</summary>
+        <label class="field">
+          <span>API base URL</span>
+          <input id="baseURL" type="url" spellcheck="false" placeholder="https://api.anthropic.com">
+          <small>Leave empty unless you route requests through your own proxy.</small>
+        </label>
+      </details>
+    </section>
+
+    <section>
+      <h2>Languages</h2>
+      <label class="field">
+        <span>Explanations are written in</span>
+        <input id="nativeLang" type="text" placeholder="English">
+        <small>Subtitles already in this language are not analyzed unless you pick them yourself.</small>
+      </label>
+      <div class="field">
+        <span>Languages you are learning, first choice first</span>
+        <input id="learning" type="text" placeholder="ja, ko, zh">
+        <small>When a video has several subtitle tracks, Langtitles uses the first of these it finds. Codes: ja Japanese, ko Korean, zh Chinese, th Thai, vi Vietnamese, id Indonesian, hi Hindi, es, fr, de, it, pt, ru…</small>
+      </div>
+    </section>
+
+    <section>
+      <h2>Subtitle sites</h2>
+      <p class="hint">When a site has no subtitles in the language you are learning, Langtitles can fetch them from subtitle sites for the episode you are watching. Each site needs a free account. Set up any of them; Langtitles searches all that are set up.</p>
+      <label class="check"><input id="autoFind" type="checkbox"> Load subtitles automatically when the site has none in my languages</label>
+      <h3>OpenSubtitles</h3>
+      <label class="field">
+        <span>API key</span>
+        <input id="osApiKey" type="password" autocomplete="off" spellcheck="false">
+        <small>The largest library, all languages. Sign up at opensubtitles.com, then under your profile open <a href="https://www.opensubtitles.com/consumers" target="_blank" rel="noopener">API consumers</a>, create one and copy its key.</small>
+      </label>
+      <div class="pair">
+        <label class="field"><span>Username</span><input id="osUser" type="text" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>Password</span><input id="osPass" type="password" autocomplete="off"></label>
+      </div>
+      <small class="block">Optional. Signed in you get 20 downloads a day instead of 5. Langtitles saves each file it downloads, so rewatching does not use up downloads.</small>
+      <h3>SubDL</h3>
+      <label class="field">
+        <span>API key</span>
+        <input id="subdlKey" type="password" autocomplete="off" spellcheck="false">
+        <small>Good for Korean, Chinese and season packs. Sign up at subdl.com and copy the key from <a href="https://subdl.com/panel/api" target="_blank" rel="noopener">your API panel</a>.</small>
+      </label>
+      <h3>Jimaku</h3>
+      <label class="field">
+        <span>API key</span>
+        <input id="jimakuKey" type="password" autocomplete="off" spellcheck="false">
+        <small>Japanese subtitles for anime, often taken from the original broadcast. Sign up at jimaku.cc and create a key on <a href="https://jimaku.cc/account" target="_blank" rel="noopener">your account page</a>.</small>
+      </label>
+    </section>
+
+    <section>
+      <h2>Display</h2>
+      <label class="check"><input id="showMeaning" type="checkbox"> Meaning of each word above it</label>
+      <label class="check"><input id="showParts" type="checkbox"> Word pieces with their glosses (x + y + z)</label>
+      <label class="check"><input id="furigana" type="checkbox"> Furigana (hiragana) over kanji you haven't marked as known</label>
+      <label class="check"><input id="pinyin" type="checkbox"> Pinyin over Chinese characters</label>
+      <label class="check"><input id="hideKnownPinyin" type="checkbox"> No pinyin over Chinese characters you've marked as known</label>
+      <small class="block">Press <kbd>R</kbd> while watching to switch readings on or off. Mark characters as known from the hover popup or the word bank.</small>
+      <label class="check"><input id="showRoles" type="checkbox"> Sentence roles (subject, object, predicate…) under the words</label>
+      <label class="check"><input id="showTranslation" type="checkbox"> Translation under the line</label>
+      <label class="check"><input id="hideNative" type="checkbox"> Hide the site's own subtitles while Langtitles shows them</label>
+      <label class="field">
+        <span>Text size</span>
+        <input id="fontScale" type="range" min="0.6" max="1.8" step="0.05">
+        <small id="fontScaleValue"></small>
+      </label>
+    </section>
+
+    <section>
+      <h2>Hover</h2>
+      <label class="check"><input id="hoverPause" type="checkbox"> Pause the video while the pointer is on a word</label>
+      <label class="check"><input id="resumeOnLeave" type="checkbox"> Resume playing when the pointer leaves the subtitles</label>
+      <label class="check"><input id="autoDeep" type="checkbox"> When you rest on a word, open the full guide to its grammar form (written once per form, then saved), or a longer explanation for words without one</label>
+    </section>
+
+    <section>
+      <h2>Preparing ahead</h2>
+      <label class="field">
+        <span>Prepare subtitles this far ahead of what you are watching</span>
+        <select id="lookaheadMin">
+          <option value="3">3 minutes</option>
+          <option value="10">10 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="0">The whole video at once</option>
+        </select>
+        <small>Further ahead means seeking rarely waits, but you pay for lines you may never watch.</small>
+      </label>
+      <label class="field">
+        <span>Lines per request</span>
+        <input id="chunkSize" type="number" min="2" max="25">
+      </label>
+      <label class="field">
+        <span>Requests at the same time</span>
+        <input id="concurrency" type="number" min="1" max="8">
+      </label>
+    </section>
+
+    <section>
+      <h2>Sites</h2>
+      <label class="check"><input id="enabled" type="checkbox"> Langtitles is on</label>
+      <div class="field">
+        <span>Turned off on these sites</span>
+        <ul id="disabledHosts" class="hosts"></ul>
+        <small>Turn Langtitles off for the current site from the toolbar button.</small>
+      </div>
+    </section>
+
+    <section>
+      <h2>Usage and cache</h2>
+      <div id="usage" class="usage"></div>
+      <div class="row">
+        <button id="resetUsage" type="button">Reset usage counter</button>
+        <button id="clearCache" type="button">Clear saved breakdowns and subtitles</button>
+        <a href="../grammar/grammar.html" target="_blank">Grammar library</a>
+        <span id="cacheResult" class="note"></span>
+      </div>
+      <small>Breakdowns are saved, so rewatching never costs anything. Clearing them keeps your grammar guides. The estimate uses list prices and can differ from your bill.</small>
+    </section>
+
+    <section>
+      <h2>Keys while watching</h2>
+      <table class="keys">
+        <tr><td><kbd>A</kbd> / <kbd>D</kbd></td><td>Previous / next line</td></tr>
+        <tr><td><kbd>S</kbd></td><td>Replay the current line</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Open or close the side panel</td></tr>
+        <tr><td><kbd>H</kbd></td><td>Hide or show Langtitles subtitles</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Furigana / pinyin on or off</td></tr>
+      </table>
+    </section>
+    <p id="saved" class="saved">Saved</p>
+  </main>
+  <script src="../shared/settings.js"></script>
+  <script src="../shared/lang.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
