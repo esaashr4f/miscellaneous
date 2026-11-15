@@ -11,7 +11,8 @@
     <div class="top">
       <h1>Word bank</h1>
       <div class="actions">
-        <button id="exportAnki" type="button">Export for Anki</button>
+        <a id="reviewLink" class="btnlink" href="../review/review.html">Review</a>
+        <button id="exportAnki" type="button" class="secondary">Export for Anki</button>
         <button id="backup" type="button" class="secondary">Back up</button>
         <label class="secondary filebtn">Restore<input id="restore" type="file" accept=".json,application/json" hidden></label>
       </div>
@@ -36,6 +37,9 @@
   <script src="../shared/settings.js"></script>
   <script src="../shared/lang.js"></script>
   <script src="../shared/ruby.js"></script>
+  <script src="../shared/srs.js"></script>
+  <script src="../shared/strokes.js"></script>
+  <script src="../shared/speech.js"></script>
   <script src="../background/cache.js"></script>
   <script src="bank.js"></script>
 </body>

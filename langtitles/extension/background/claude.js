@@ -174,6 +174,29 @@
     }
   }
 
+  // A vocabulary list for a whole episode, from its numbered lines.
+  async function episodeWords(settings, lines) {
+    const { prompt } = SG;
+    let message;
+    try {
+      const params = baseParams(settings, 24000);
+      params.system = prompt.wordsSystemPrompt(settings.nativeLang);
+      params.messages = [{ role: 'user', content: lines.map((l, i) => `${i}: ${l}`).join('\n') }];
+      params.output_config.format = { type: 'json_schema', schema: prompt.WORDS_SCHEMA };
+      message = await getClient(settings).beta.messages.stream(params).finalMessage();
+    } catch (err) {
+      throw describeError(err);
+    }
+    recordUsage(message.model || settings.model, message.usage).catch(() => {});
+    if (message.stop_reason === 'refusal') throw new LangtitlesError('refusal', 'Claude declined to list these words.');
+    if (message.stop_reason === 'max_tokens') throw new LangtitlesError('truncated', 'The word list was cut off.');
+    try {
+      return JSON.parse(textOf(message)).words || [];
+    } catch (e) {
+      throw new LangtitlesError('parse', 'Claude returned a word list that could not be read.');
+    }
+  }
+
   // Cheapest possible round trip, used by the "Test key" button.
   async function testKey(settings) {
     try {
@@ -186,5 +209,5 @@
     }
   }
 
-  SG.claude = { analyzeLines, explainWord, explainForm, charEntry, testKey, describeError, LangtitlesError };
+  SG.claude = { analyzeLines, explainWord, explainForm, charEntry, episodeWords, testKey, describeError, LangtitlesError };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

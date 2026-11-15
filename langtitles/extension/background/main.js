@@ -193,6 +193,39 @@
     return charsInflight.get(key);
   }
 
+  // Stroke order data: KanjiVG for Japanese, hanzi-writer-data for Chinese, each the
+  // other's fallback. Fetched on first use and kept.
+  async function strokeData(ch, lang) {
+    const key = lang + '|' + ch;
+    const hit = (await cache.getMany('strokes', [key])).get(key);
+    if (hit) return hit;
+    const sources = lang === 'zh'
+      ? [['hw', SG.strokes.hanziWriterUrl(ch)], ['kvg', SG.strokes.kanjiVGUrl(ch)]]
+      : [['kvg', SG.strokes.kanjiVGUrl(ch)], ['hw', SG.strokes.hanziWriterUrl(ch)]];
+    for (const [kind, url] of sources) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const entry = { kind, text: await res.text() };
+        cache.putMany('strokes', [[key, entry]]).catch(() => {});
+        return entry;
+      } catch (e) {
+        /* try the other source */
+      }
+    }
+    return null;
+  }
+
+  async function wordList(lines, sig) {
+    await ready;
+    const key = [prompt.WORDS_VERSION, settings.model, settings.nativeLang, 'words', sig].join('|');
+    const hit = (await cache.getMany('deep', [key])).get(key);
+    if (hit) return hit;
+    const words = await claude.episodeWords(settings, lines);
+    cache.putMany('deep', [[key, words]]).catch(() => {});
+    return words;
+  }
+
   function bankKey(kind, lang, text) {
     return [kind, lang, text].join('|');
   }
@@ -359,6 +392,13 @@
         cache.remove('bank', msg.key).then(() => send(port, { type: 'bankSaved', reqId: msg.reqId, removed: true }));
       } else if (msg.type === 'bankStatus') {
         bankStatus(msg.keys).then((status) => send(port, { type: 'bankStatus', reqId: msg.reqId, status }));
+      } else if (msg.type === 'stroke') {
+        strokeData(msg.ch, msg.lang).then((data) => send(port, { type: 'stroke', reqId: msg.reqId, data }));
+      } else if (msg.type === 'episodeWords') {
+        wordList(msg.lines, msg.sig).then(
+          (words) => send(port, { type: 'episodeWords', reqId: msg.reqId, words }),
+          (err) => send(port, { type: 'episodeWords', reqId: msg.reqId, error: err.message }),
+        );
       } else if (msg.type === 'seekDone') {
         pendingSeeks.delete(tabId);
       } else if (msg.type === 'openBank') {
@@ -441,6 +481,7 @@
     if (msg.type === 'bankPut' && Array.isArray(msg.items)) {
       return cache.putMany('bank', msg.items.filter((x) => x && x.key).map((x) => [x.key, x])).then(() => ({ ok: true, count: msg.items.length }));
     }
+    if (msg.type === 'stroke' && msg.ch) return strokeData(msg.ch, msg.lang).then((data) => ({ data }));
     if (msg.type === 'charInfo' && msg.ch) return charInfo(msg).then((entry) => ({ entry }), (err) => ({ error: err.message }));
     if (msg.type === 'openAt' && msg.url) {
       // Open a saved line's page; the player there jumps to the line once it loads.

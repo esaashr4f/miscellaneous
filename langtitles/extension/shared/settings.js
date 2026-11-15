@@ -39,6 +39,12 @@
     osPass: '',
     subdlKey: '',
     jimakuKey: '',
+    highlightNew: true, // mark words you haven't marked as known (once 20 are known in that language)
+    pauseOnePlus: false, // pause after a line with exactly one new word
+    slowReplay: true, // S replays the line slowed down
+    slowRate: 0.75,
+    newPerDay: 20, // new cards per day in review
+    autoKnownFromReview: true, // words and characters you've learned in review count as known
     hoverPause: true,
     resumeOnLeave: true,
     autoDeep: true,

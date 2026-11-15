@@ -20,6 +20,28 @@ Japanese gets hiragana over each kanji, and Chinese gets pinyin over each charac
 ![A kanji entry](docs/character.png)
 ![The word bank](docs/word-bank.png)
 
+## Studying while you watch
+
+- **New words underlined.** Mark words you know with **Known?** in the hover popup, with **Mark every word known** for a line in the side panel, or by learning them in review. Once 20 words are known in a language, words you don't know yet get a wavy underline.
+- **Pause on one new word** (optional, in Options). After a line with exactly one new word, the video pauses with that word shown, since those lines are often the easiest to learn from.
+- **Slow replay.** **S** replays the current line at 0.75× (the speed is adjustable), and **L** loops it until you press L again.
+- **Pronunciation.** 🔊 in the hover popup, the side panel, the word bank and review reads a word or line aloud. It uses the voices installed on your computer: if one is missing, Langtitles says how to add it.
+- **Episode words.** Side panel → **Episode words** lists the words of the whole episode you haven't marked known, most frequent first, with an example line you can jump to. It costs one Claude request per episode, and the list is saved.
+
+![Episode words](docs/episode-words.png)
+
+## Review
+
+**Review** (toolbar button, word bank, or the panel's Word bank) turns saved words and characters into flashcards with spaced repetition: Again, Hard, Good or Easy schedule the next review (Space shows the answer, keys 1 to 4 grade it). Word cards show the word in the line you met it; the answer adds furigana, meaning, pieces, the translation and audio. Character cards add stroke order. New cards per day can be set in Options. Words and characters you've learned (reviewed every 21 days or longer) count as known automatically, so their furigana and underline go away; this can be turned off.
+
+![Review](docs/review.png)
+
+## Stroke order and components
+
+Every kanji and hanzi entry shows its stroke order, animated and numbered. For Japanese, the data comes from [KanjiVG](https://kanjivg.tagaini.net) (© Ulrich Apel and contributors, CC BY-SA 3.0), which also records each character's components: the diagram colours each component, and lists which one is the radical and which gives the sound. Claude's breakdown sits beside it. For Chinese, stroke order comes from [Make Me a Hanzi](https://github.com/skishore/makemeahanzi) via hanzi-writer-data (Arphic Public License), and the components come from Claude's entry. Stroke data is downloaded the first time a character is opened and then kept.
+
+![Stroke order](docs/stroke-order.png)
+
 ## Subtitles from subtitle sites
 
 Streaming sites often have no subtitles in the language you are learning. Langtitles can fetch them from **OpenSubtitles**, **SubDL** and **Jimaku** (Japanese anime subtitles) through their official APIs. Each needs a free account; add the keys under **Options → Subtitle sites**.
@@ -66,7 +88,7 @@ You need Firefox 140 or newer and an Anthropic API key from [console.anthropic.c
 2. Langtitles picks them up and starts preparing them. The toolbar button shows how many lines are ready.
 3. Hover any word to pause and read more. Move the pointer away and the video resumes.
 
-Keys while a video is playing: **A** / **D** previous / next line, **S** replay the line, **G** side panel, **H** hide Langtitles subtitles, **R** furigana / pinyin on or off.
+Keys while a video is playing: **A** / **D** previous / next line, **S** replay the line, **G** side panel, **H** hide Langtitles subtitles, **R** furigana / pinyin on or off, **S** replay the line slowed down, **L** loop it.
 
 ### Where the subtitles come from
 
@@ -127,4 +149,8 @@ npm run package
 | `extension/background/files.js` | Zip archives and legacy text encodings in downloaded files |
 | `extension/grammar/` | The grammar library page |
 | `extension/bank/` | The word bank page |
+| `extension/review/` | Flashcard review |
+| `extension/shared/srs.js` | Review scheduling |
+| `extension/shared/strokes.js` | Stroke order parsing and drawing |
+| `extension/shared/speech.js` | Pronunciation with the system's voices |
 | `extension/shared/ruby.js` | Furigana and pinyin placement, known characters, Anki formatting |

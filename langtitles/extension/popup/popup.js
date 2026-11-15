@@ -42,6 +42,19 @@
     });
   }
 
+  $('openReview').addEventListener('click', (e) => {
+    e.preventDefault();
+    browser.tabs.create({ url: browser.runtime.getURL('review/review.html') });
+    window.close();
+  });
+  (async () => {
+    const items = await SG.cache.getAll('bank');
+    const log = (await browser.storage.local.get('reviewLog')).reviewLog || {};
+    const newDone = log.day === SG.srs.dayKey(Date.now()) ? log.newDone || 0 : 0;
+    const c = SG.srs.counts(items, Date.now(), (settings.newPerDay || 20) - newDone);
+    if (c.total) $('openReview').textContent = `Review (${c.total})`;
+  })();
+
   $('openBank').addEventListener('click', (e) => {
     e.preventDefault();
     browser.tabs.create({ url: browser.runtime.getURL('bank/bank.html') });

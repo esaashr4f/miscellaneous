@@ -285,5 +285,38 @@ Met in the word: ${req.word || ''}${req.reading ? ` (${req.reading})` : ''}
 In the line: ${req.sentence || ''}`;
   }
 
-  SG.prompt = { PROMPT_VERSION, GUIDE_VERSION, CHAR_VERSION, CHAR_SCHEMA, charSystemPrompt, charUserMessage, guideSystemPrompt, guideUserMessage, ROLES, ANALYSIS_SCHEMA, systemPrompt, userMessage, deepSystemPrompt, deepUserMessage };
+  // Episode word lists: one call over the whole transcript.
+  const WORDS_VERSION = 1;
+
+  const WORDS_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['words'],
+    properties: {
+      words: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['d', 'r', 'm', 'pos', 'count', 'line'],
+          properties: {
+            d: { type: 'string', description: 'Dictionary form.' },
+            r: { type: 'string', description: 'Hiragana for Japanese words with kanji, pinyin for Chinese, otherwise empty. No romanization.' },
+            m: { type: 'string', description: 'Meaning as used in this episode.' },
+            pos: { type: 'string', description: 'Part of speech.' },
+            count: { type: 'integer', description: 'How many lines use the word, in any form.' },
+            line: { type: 'integer', description: 'Number of a line that uses it, the clearest example.' },
+          },
+        },
+      },
+    },
+  };
+
+  function wordsSystemPrompt(nativeLang) {
+    return `You prepare a vocabulary list from an episode's subtitles so a language learner can study the words before watching. The learner reads ${nativeLang}; write meanings in ${nativeLang}.
+
+List the words in the dictionary form, counting every inflected form of a word as the same word. Leave out particles, grammatical endings, interjections, sound effects and people's names; keep place names and other proper nouns only when they need explaining. Order the list by how many lines use the word, most first, and include up to 150 words. For each: d the dictionary form, r its reading (hiragana for Japanese words with kanji, pinyin with tone marks for Chinese, an empty string otherwise; never romanization), m the meaning it has in this episode, pos its part of speech, count the number of lines that use it, line the number of the line that shows it most clearly.`;
+  }
+
+  SG.prompt = { WORDS_VERSION, WORDS_SCHEMA, wordsSystemPrompt, PROMPT_VERSION, GUIDE_VERSION, CHAR_VERSION, CHAR_SCHEMA, charSystemPrompt, charUserMessage, guideSystemPrompt, guideUserMessage, ROLES, ANALYSIS_SCHEMA, systemPrompt, userMessage, deepSystemPrompt, deepUserMessage };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

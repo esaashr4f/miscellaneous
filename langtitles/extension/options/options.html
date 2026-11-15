@@ -107,6 +107,33 @@
     </section>
 
     <section>
+      <h2>Studying while you watch</h2>
+      <label class="check"><input id="highlightNew" type="checkbox"> Underline words I don't know yet (starts once 20 words are marked known in a language)</label>
+      <label class="check"><input id="pauseOnePlus" type="checkbox"> Pause after a line with exactly one new word</label>
+      <label class="check"><input id="slowReplay" type="checkbox"> Replay lines slowed down (S replays, L loops)</label>
+      <label class="field">
+        <span>Replay speed</span>
+        <select id="slowRate">
+          <option value="0.5">0.5×</option>
+          <option value="0.6">0.6×</option>
+          <option value="0.75">0.75×</option>
+          <option value="0.85">0.85×</option>
+          <option value="1">Normal speed</option>
+        </select>
+      </label>
+    </section>
+
+    <section>
+      <h2>Review</h2>
+      <label class="field">
+        <span>New cards per day</span>
+        <input id="newPerDay" type="number" min="0" max="200">
+      </label>
+      <label class="check"><input id="autoKnownFromReview" type="checkbox"> Count words and characters as known once learned in review (reviewed every 21 days or longer)</label>
+      <small class="block">Known characters get no furigana; known words are not underlined as new.</small>
+    </section>
+
+    <section>
       <h2>Hover</h2>
       <label class="check"><input id="hoverPause" type="checkbox"> Pause the video while the pointer is on a word</label>
       <label class="check"><input id="resumeOnLeave" type="checkbox"> Resume playing when the pointer leaves the subtitles</label>
@@ -161,7 +188,8 @@
       <h2>Keys while watching</h2>
       <table class="keys">
         <tr><td><kbd>A</kbd> / <kbd>D</kbd></td><td>Previous / next line</td></tr>
-        <tr><td><kbd>S</kbd></td><td>Replay the current line</td></tr>
+        <tr><td><kbd>S</kbd></td><td>Replay the current line (slowed down, if that option is on)</td></tr>
+        <tr><td><kbd>L</kbd></td><td>Loop the current line; press again to stop</td></tr>
         <tr><td><kbd>G</kbd></td><td>Open or close the side panel</td></tr>
         <tr><td><kbd>H</kbd></td><td>Hide or show Langtitles subtitles</td></tr>
         <tr><td><kbd>R</kbd></td><td>Furigana / pinyin on or off</td></tr>

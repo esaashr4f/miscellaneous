@@ -42,7 +42,32 @@
     $('nWord').textContent = items.filter((x) => x.kind === 'word').length || '';
     $('nChar').textContent = items.filter((x) => x.kind === 'char').length || '';
     $('nKnown').textContent = Array.from(known.ja + known.zh).length || '';
+    const settings = await SG.loadSettings();
+    const log = (await browser.storage.local.get('reviewLog')).reviewLog || {};
+    const newDone = log.day === SG.srs.dayKey(Date.now()) ? log.newDone || 0 : 0;
+    const c = SG.srs.counts(items, Date.now(), (settings.newPerDay || 20) - newDone);
+    $('reviewLink').textContent = c.total ? `Review (${c.total})` : 'Review';
+    knownWords = (await browser.storage.local.get('knownWords')).knownWords || {};
     render();
+  }
+
+  let knownWords = {};
+
+  function sayButton(text, lang) {
+    const b = h('button', 'say', '🔊');
+    b.title = 'Hear it';
+    b.addEventListener('click', async () => {
+      const ok = await SG.speech.speak(text, lang);
+      if (!ok) toast(SG.speech.missingVoiceHelp(lang));
+    });
+    return b;
+  }
+
+  function srsLine(item) {
+    const s = item.srs;
+    if (!s || s.state === 'new') return h('div', 'srs', 'Not reviewed yet');
+    const due = new Date(s.due);
+    return h('div', 'srs', `${SG.srs.isMature(s) ? 'Learned' : s.state === 'review' ? 'Reviewing' : 'Learning'} · next review ${due.toLocaleDateString()}${s.interval ? ` · every ${s.interval} d` : ''}`);
   }
 
   function visible(kind) {
@@ -117,12 +142,13 @@
     head.append(rubyEl(w.s === item.text ? w.f : null, item.text));
     if (w.s && w.s !== item.text) head.append(h('span', 'pos', 'seen as ' + w.s + (w.r ? ` (${w.r})` : '')));
     else if (w.r && !(w.f && w.f.some((x) => x.r))) head.append(h('span', 'reading', w.r));
-    head.append(h('span', 'lang-tag', SG.lang.langName(item.lang)), h('span', 'spacer'));
+    head.append(sayButton(w.s || item.text, item.lang), h('span', 'lang-tag', SG.lang.langName(item.lang)), h('span', 'spacer'));
     const del = h('button', 'icon-btn', 'Remove');
     del.addEventListener('click', () => remove(item));
     head.append(del);
     card.append(head);
     if (w.m) card.append(h('div', 'meaning', w.m));
+    card.append(srsLine(item));
     if (w.pos) card.append(h('div', 'pos', w.pos));
     if (Array.isArray(w.p) && w.p.length > 1) {
       const pieces = h('div', 'pieces');
@@ -172,6 +198,7 @@
     head.append(kb, del);
     card.append(head);
     if (e.meanings && e.meanings.length) card.append(h('div', 'meaning', e.meanings.join('; ')));
+    card.append(srsLine(item));
     if (e.parts && e.parts.length) {
       const pieces = h('div', 'pieces');
       e.parts.forEach((p, i) => {
@@ -183,6 +210,33 @@
       card.append(pieces);
     }
     if (e.build) card.append(h('div', 'note', e.build));
+    const strokeBtn = h('button', 'say', 'Show stroke order');
+    const strokeBox = h('div', 'strokes');
+    strokeBtn.addEventListener('click', async () => {
+      strokeBtn.remove();
+      const res = await browser.runtime.sendMessage({ type: 'stroke', ch, lang: item.lang });
+      if (!res || !res.data) {
+        strokeBox.textContent = 'No stroke order data for this character.';
+        return;
+      }
+      const data = res.data.kind === 'kvg' ? SG.strokes.parseKanjiVG(res.data.text) : SG.strokes.parseHanziWriter(res.data.text);
+      const pic = h('div', 'pic');
+      const legend = h('div', 'legend');
+      strokeBox.append(pic, legend);
+      SG.strokes.render(pic, data, { size: 130 });
+      legend.append(h('div', '', `${data.strokes.length} strokes`));
+      for (const c2 of SG.strokes.legend(data)) {
+        const row = h('div');
+        const sw = h('span', 'sw', c2.element);
+        sw.style.color = c2.color;
+        row.append(sw, document.createTextNode([c2.original ? `from ${c2.original}` : '', c2.role].filter(Boolean).join(' · ')));
+        legend.append(row);
+      }
+      const again = h('button', 'say', 'Replay');
+      again.addEventListener('click', () => SG.strokes.render(pic, data, { size: 130 }));
+      legend.append(again);
+    });
+    card.append(strokeBtn, strokeBox);
     if (e.readings && e.readings.some((r) => r.use)) {
       card.append(h('div', 'section', 'Readings'));
       for (const r of e.readings) card.append(h('div', 'li', `${r.r} — ${r.use}`));
@@ -253,6 +307,27 @@
       box.append(grid);
       wrap.append(box);
     }
+    const langs = Object.keys(knownWords).filter((l) => (knownWords[l] || []).length);
+    const box = h('div', 'known-box');
+    box.append(h('h2', '', 'Words you know'));
+    box.append(h('p', '', 'Words you mark "Known" while watching, and words you have learned in review (every 21 days or longer). Once 20 words are known in a language, new words are underlined in the subtitles. Click a word to remove it.'));
+    if (!langs.length) box.append(h('p', '', 'None yet.'));
+    for (const lang of langs) {
+      box.append(h('div', 'section', `${SG.lang.langName(lang)} (${knownWords[lang].length})`));
+      const list = h('div', 'kw-list');
+      list.lang = lang;
+      for (const w of knownWords[lang]) {
+        const b = h('button', '', w);
+        b.addEventListener('click', async () => {
+          knownWords[lang] = knownWords[lang].filter((x) => x !== w);
+          await browser.storage.local.set({ knownWords });
+          b.remove();
+        });
+        list.append(b);
+      }
+      box.append(list);
+    }
+    wrap.append(box);
     return wrap;
   }
 

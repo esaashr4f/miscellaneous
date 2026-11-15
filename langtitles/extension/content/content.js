@@ -79,6 +79,12 @@
   const known = { ja: new Set(), zh: new Set() };
   let pendingSeek = null;
 
+  // Known words (dictionary forms, per language), and the line-study helpers
+  let knownWords = {}; // lang -> Set
+  let lineNew = null; // { key, idx, words } for the line on screen
+  let onePlusDone = null; // key of the last line paused for
+  let replay = null; // { idx, end, rate, loop }
+
   // ---------------------------------------------------------------- helpers
 
   function h(tag, cls, text) {
@@ -205,7 +211,7 @@
       onAnalyzed(msg);
     } else if (msg.type === 'deepDelta' || msg.type === 'deepDone' || msg.type === 'deepError') {
       onDeep(msg);
-    } else if (['tabInfo', 'subsFound', 'subLoaded', 'charInfo', 'bankSaved', 'bankStatus'].includes(msg.type)) {
+    } else if (['tabInfo', 'subsFound', 'subLoaded', 'charInfo', 'bankSaved', 'bankStatus', 'stroke', 'episodeWords'].includes(msg.type)) {
       const cb = subReqs.get(msg.reqId);
       subReqs.delete(msg.reqId);
       if (cb) cb(msg);
@@ -595,7 +601,10 @@
     const findBtn = h('button', 'sg-btn', 'Find subtitles');
     findBtn.title = 'Search OpenSubtitles, SubDL and Jimaku for this episode';
     findBtn.addEventListener('click', () => openFind());
-    tools.append(select, findBtn, fileBtn, pickBtn, early, offset, late, file);
+    const wordsBtn = h('button', 'sg-btn', 'Episode words');
+    wordsBtn.title = "The episode's words you don't know yet, most frequent first";
+    wordsBtn.addEventListener('click', () => openEpisodeWords());
+    tools.append(select, findBtn, wordsBtn, fileBtn, pickBtn, early, offset, late, file);
 
     const hint = h('div', 'sg-hint');
     const guide = h('div', 'sg-pguide');
@@ -619,8 +628,15 @@
     findHead.append(h('span', 'sg-pguide-title', 'Find subtitles'), findBack);
     const findBody = h('div', 'sg-pguide-body');
     find.append(findHead, findBody);
-    el.append(head, tools, hint, find, guide, detail, listTitle, list);
-    return { el, status, select, offset, hint, find, findBody, guide, guideTitle, guideBody, detail, list, rows: new Map() };
+    const words = h('div', 'sg-pguide sg-find');
+    const wordsHead = h('div', 'sg-pguide-head');
+    const wordsBack = h('button', 'sg-btn', 'Back');
+    wordsBack.addEventListener('click', () => words.classList.remove('sg-show'));
+    wordsHead.append(h('span', 'sg-pguide-title', 'Episode words'), wordsBack);
+    const wordsBody = h('div', 'sg-pguide-body');
+    words.append(wordsHead, wordsBody);
+    el.append(head, tools, hint, find, words, guide, detail, listTitle, list);
+    return { el, status, select, offset, hint, find, findBody, words, wordsBody, guide, guideTitle, guideBody, detail, list, rows: new Map() };
   }
 
   // Keep the overlay glued to the video, including in fullscreen.
@@ -757,7 +773,7 @@
   }
 
   function buildToken(w, index, firstOfPhrase, ctx) {
-    const tok = h('span', 'sg-tok sg-role-' + (w.role || 'other'));
+    const tok = h('span', 'sg-tok sg-role-' + (w.role || 'other') + (isNewWord(w, ctx.lang) ? ' sg-new' : ''));
     const parts = Array.isArray(w.p) && w.p.length ? w.p : [{ t: w.s, g: w.m }];
     const multi = parts.length > 1;
 
@@ -891,6 +907,7 @@
       return;
     }
     const now = video.currentTime - t.offset;
+    studyChecks(t, now);
     let idx = findCue(t.cues, now);
     // Captions read from the page disappear when the page clears them, not at a guessed end time.
     if (t.source === 'dom' && !domText && !video.paused) idx = -1;
@@ -912,6 +929,8 @@
       shownIndex = idx;
       renderLine(t.cues[idx], key);
       highlightRow(idx);
+      const a = analyses.get(key);
+      lineNew = a ? { key, idx, words: newWordsIn(a) } : null;
     }
   }
 
@@ -960,7 +979,7 @@
     const head = h('div', 'sg-pop-head');
     head.append(h('span', 'sg-pop-word', w.s));
     if (w.r && !sameText(w.r, w.s)) head.append(h('span', 'sg-pop-read', w.r));
-    head.append(starButton('word', ctx.lang, w.d || w.s, () => wordItem(w, ctx)));
+    head.append(speakButton(w.s, ctx.lang), knownWordButton(w, ctx.lang), starButton('word', ctx.lang, w.d || w.s, () => wordItem(w, ctx)));
     pop.append(head);
     const meta = [w.pos, w.d && !sameText(w.d, w.s) ? 'dictionary form: ' + w.d : ''].filter(Boolean).join(' · ');
     if (meta) pop.append(h('div', 'sg-pop-meta', meta));
@@ -1160,6 +1179,19 @@
       return;
     }
     if (a.tr) box.append(h('div', 'sg-d-tr', a.tr));
+    const lineTools = h('div', 'sg-d-tools');
+    const lang = langCode(a.lang);
+    const say = h('button', 'sg-btn', '🔊 Hear the line');
+    say.addEventListener('click', () => speakText(cue.text, lang));
+    const allKnown = h('button', 'sg-btn', 'Mark every word known');
+    allKnown.title = 'Marks each word in this line as known (particles and names are never highlighted anyway)';
+    allKnown.addEventListener('click', async () => {
+      const words = (a.w || []).filter((w) => !isTrivial(w)).map((w) => w.d || w.s);
+      await setWordsKnown(lang, words, true);
+      showToast(`Marked ${words.length} word${words.length === 1 ? '' : 's'} known.`);
+    });
+    lineTools.append(say, allKnown);
+    box.append(lineTools);
     if (a.lit) {
       box.append(h('div', 'sg-section', 'Word for word'), h('div', 'sg-d-lit', a.lit));
     }
@@ -1229,6 +1261,7 @@
   function openPanelGuide(form, ctx, w) {
     const p = ui.panel;
     p.find.classList.remove('sg-show');
+    p.words.classList.remove('sg-show');
     p.guide.dataset.k = form.k;
     p.guideTitle.textContent = form.name || form.k;
     p.guide.classList.add('sg-show');
@@ -1311,7 +1344,8 @@
     const key = e.key.toLowerCase();
     if (key === 'a') seekToCue(-1);
     else if (key === 'd') seekToCue(1);
-    else if (key === 's') seekToCue(0);
+    else if (key === 's') replayLine(false);
+    else if (key === 'l') replayLine(true);
     else if (key === 'g') setPanel(!settings.panelOpen);
     else if (key === 'r') toggleReadings();
     else if (key === 'h') {
@@ -1372,16 +1406,285 @@
     tick();
   }
 
-  browser.storage.local.get('known').then((r) => {
+  function loadKnownWords(value) {
+    knownWords = {};
+    for (const [lang, list] of Object.entries(value || {})) knownWords[lang] = new Set(list);
+  }
+
+  browser.storage.local.get(['known', 'knownWords']).then((r) => {
     loadKnown(r.known);
+    loadKnownWords(r.knownWords);
     refreshLine();
   }, () => {});
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.known) {
-      loadKnown(changes.known.newValue);
-      refreshLine();
-    }
+    if (area !== 'local') return;
+    if (changes.known) loadKnown(changes.known.newValue);
+    if (changes.knownWords) loadKnownWords(changes.knownWords.newValue);
+    if (changes.known || changes.knownWords) refreshLine();
   });
+
+  // ------------------------------------------------------- new and known words
+
+  const NEW_THRESHOLD = 20;
+
+  function isTrivial(w) {
+    return /particle|punctuation|interjection|auxiliary|proper noun|name|助詞|symbol|onomatopoeia/i.test(w.pos || '') || ['connector', 'interjection', 'address'].includes(w.role) && /particle|conjunction/i.test(w.pos || '');
+  }
+
+  function wordKnown(w, lang) {
+    const set = knownWords[lang];
+    return Boolean(set && (set.has(w.d || w.s) || set.has(w.s)));
+  }
+
+  // Highlighting starts once enough words are marked known in the language, so that a
+  // highlighted word means something.
+  function highlighting(lang) {
+    return settings.highlightNew && knownWords[lang] && knownWords[lang].size >= NEW_THRESHOLD;
+  }
+
+  function isNewWord(w, lang) {
+    return highlighting(lang) && !isTrivial(w) && !wordKnown(w, lang);
+  }
+
+  function newWordsIn(a) {
+    const lang = langCode(a.lang);
+    if (!highlighting(lang)) return [];
+    const seen = new Set();
+    return (a.w || []).filter((w) => isNewWord(w, lang) && !seen.has(w.d || w.s) && seen.add(w.d || w.s));
+  }
+
+  async function setWordsKnown(lang, words, on) {
+    const r = await browser.storage.local.get('knownWords');
+    const all = Object.assign({}, r.knownWords);
+    const set = new Set(all[lang] || []);
+    for (const w of words) {
+      if (on) set.add(w);
+      else set.delete(w);
+    }
+    all[lang] = Array.from(set);
+    await browser.storage.local.set({ knownWords: all });
+    return set;
+  }
+
+  function knownWordButton(w, lang) {
+    const b = h('button', 'sg-kw');
+    const paint = () => {
+      const on = wordKnown(w, lang);
+      b.textContent = on ? '✓ Known' : 'Known?';
+      b.classList.toggle('sg-on', on);
+      b.title = on ? 'You know this word · click to undo' : 'Mark this word as one you know (it stops being highlighted as new)';
+    };
+    paint();
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const on = !wordKnown(w, lang);
+      const set = await setWordsKnown(lang, [w.d || w.s], on);
+      knownWords[lang] = set;
+      paint();
+      const n = set.size;
+      if (on && n === NEW_THRESHOLD && settings.highlightNew) showToast(`${n} words known: words you don't know yet are now underlined.`);
+    });
+    return b;
+  }
+
+  // ------------------------------------------------------- replay and pausing
+
+  function replayLine(loop) {
+    const t = active();
+    if (!t || !video) return;
+    const now = video.currentTime - t.offset;
+    let idx = findCue(t.cues, now);
+    if (idx === -1) {
+      idx = t.cues.findIndex((c) => c.start > now) - 1;
+      if (idx < 0) idx = Math.max(0, t.cues.length - 1);
+    }
+    if (loop && replay && replay.loop) {
+      stopReplay();
+      showToast('Loop off (L).');
+      return;
+    }
+    const cue = t.cues[idx];
+    if (!replay) replay = { rate: video.playbackRate };
+    replay.idx = idx;
+    replay.end = cue.end;
+    replay.start = cue.start;
+    replay.loop = loop;
+    if (settings.slowReplay) video.playbackRate = settings.slowRate || 0.75;
+    video.currentTime = cue.start + t.offset + 0.01;
+    const p = video.play();
+    if (p && p.catch) p.catch(() => {});
+    if (loop) showToast(`Looping this line${settings.slowReplay ? ' slowed down' : ''}. Press L to stop.`);
+  }
+
+  function stopReplay() {
+    if (!replay) return;
+    if (video) video.playbackRate = replay.rate || 1;
+    replay = null;
+  }
+
+  // Runs every tick: ends or repeats a replay, and pauses after a line with exactly one new word.
+  function studyChecks(t, now) {
+    if (replay) {
+      if (now >= replay.end - 0.02 && now < replay.end + 1.5) {
+        if (replay.loop) {
+          video.currentTime = replay.start + t.offset + 0.01;
+        } else {
+          stopReplay();
+        }
+      } else if (now < replay.start - 1 || now > replay.end + 1.5) {
+        stopReplay(); // the viewer jumped elsewhere
+      }
+    }
+    if (!settings.pauseOnePlus || !lineNew || video.paused || replay || popFor) return;
+    const cue = t.cues[lineNew.idx];
+    if (!cue || lineNew.words.length !== 1 || onePlusDone === lineNew.key) return;
+    if (now >= cue.end - 0.25 && now < cue.end + 0.6) {
+      onePlusDone = lineNew.key;
+      video.pause();
+      // Stay on this line even if the check ran a moment after it ended.
+      if (now > cue.end - 0.08) video.currentTime = cue.end - 0.08 + t.offset;
+      autoPaused = false;
+      const w = lineNew.words[0];
+      showToast(`One new word: ${w.s}${w.m ? ' (' + w.m + ')' : ''}. Hover it, or press Space to go on.`);
+    }
+  }
+
+  // --------------------------------------------------------- pronunciation
+
+  async function speakText(text, lang) {
+    const ok = await SG.speech.speak(text, lang);
+    if (!ok) showToast(SG.speech.missingVoiceHelp(lang));
+  }
+
+  function speakButton(text, lang) {
+    const b = h('button', 'sg-say', '🔊');
+    b.title = 'Hear it';
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      speakText(text, lang);
+    });
+    return b;
+  }
+
+  // ------------------------------------------------------------ stroke order
+
+  let strokeCssAdded = false;
+
+  function strokeBlock(ch, lang) {
+    const wrap = h('div', 'sg-strokes');
+    if (!strokeCssAdded && ui) {
+      const st = document.createElement('style');
+      st.textContent = SG.strokes.CSS;
+      ui.root.append(st);
+      strokeCssAdded = true;
+    }
+    wrap.append(h('div', 'sg-g-h', 'Stroke order'));
+    const row = h('div', 'sg-strokes-row');
+    const pic = h('div', 'sg-strokes-pic', '…');
+    const side = h('div', 'sg-strokes-side');
+    row.append(pic, side);
+    wrap.append(row);
+    request({ type: 'stroke', ch, lang }).then((res) => {
+      if (!res.data) {
+        pic.textContent = 'No stroke order data for this character.';
+        return;
+      }
+      let data;
+      try {
+        data = res.data.kind === 'kvg' ? SG.strokes.parseKanjiVG(res.data.text) : SG.strokes.parseHanziWriter(res.data.text);
+      } catch (e) {
+        pic.textContent = 'Stroke order data could not be read.';
+        return;
+      }
+      const draw = () => SG.strokes.render(pic, data, { size: 120 });
+      draw();
+      const again = h('button', 'sg-btn', 'Replay');
+      again.addEventListener('click', draw);
+      side.append(h('div', 'sg-strokes-n', `${data.strokes.length} strokes`));
+      const lg = SG.strokes.legend(data);
+      if (lg.length) {
+        const list = h('div', 'sg-strokes-legend');
+        for (const c of lg) {
+          const item = h('div', 'sg-strokes-comp');
+          const sw = h('span', 'sg-strokes-sw', c.element);
+          sw.style.color = c.color;
+          item.append(sw, h('span', '', [c.original ? `from ${c.original}` : '', c.role].filter(Boolean).join(' · ')));
+          list.append(item);
+        }
+        side.append(list);
+      }
+      side.append(again, h('div', 'sg-strokes-src', data.kind === 'kvg' ? 'KanjiVG, CC BY-SA 3.0' : 'Make Me a Hanzi'));
+    });
+    return wrap;
+  }
+
+  // ------------------------------------------------------------ episode words
+
+  async function openEpisodeWords() {
+    const p = ui.panel;
+    p.find.classList.remove('sg-show');
+    p.guide.classList.remove('sg-show');
+    p.words.classList.add('sg-show');
+    const body = p.wordsBody;
+    body.textContent = '';
+    const t = active();
+    if (!t) {
+      body.append(h('div', 'sg-g-p', 'No subtitles yet.'));
+      return;
+    }
+    if (t.source === 'dom') {
+      body.append(h('div', 'sg-g-p', "Subtitles read off the page only arrive line by line, so there's no full episode to list yet. Find subtitles for the episode first (Find subtitles)."));
+      return;
+    }
+    const lang = t.lang;
+    body.append(h('div', 'sg-find-status', `Making a list from all ${t.cues.length} lines… (once per episode)`));
+    const sig = SG.subtitles.lineKey(t.cues.map((c) => c.text).join('\n'), String(t.cues.length));
+    const res = await request({ type: 'episodeWords', lines: t.cues.map((c) => c.text), sig });
+    body.textContent = '';
+    if (res.error) {
+      body.append(h('div', 'sg-g-p', res.error));
+      return;
+    }
+    const all = res.words || [];
+    const status = h('div', 'sg-find-status');
+    const hideKnown = h('label', 'sg-f-check');
+    const box = h('input');
+    box.type = 'checkbox';
+    box.checked = true;
+    hideKnown.append(box, document.createTextNode(" Hide words I know"));
+    const list = h('div', 'sg-results');
+    body.append(status, hideKnown, list);
+    const draw = () => {
+      list.textContent = '';
+      const shown = all.filter((x) => !(box.checked && knownWords[lang] && knownWords[lang].has(x.d)));
+      status.textContent = `${shown.length} of ${all.length} words${box.checked ? " you haven't marked known" : ''}, most frequent first.`;
+      for (const x of shown) {
+        const row = h('div', 'sg-wl');
+        const top = h('div', 'sg-wl-top');
+        const word = h('span', 'sg-wl-w', x.d);
+        word.lang = lang;
+        top.append(word, h('span', 'sg-wl-r', x.r || ''), h('span', 'sg-wl-n', '×' + x.count));
+        const fake = { s: x.d, d: x.d, r: x.r, m: x.m, pos: x.pos };
+        const line = t.cues[x.line];
+        const ctx = { sentence: line ? line.text : '', translation: '', lang, time: line ? line.start + t.offset : 0 };
+        const kn = knownWordButton(fake, lang);
+        kn.addEventListener('click', () => setTimeout(draw, 50));
+        top.append(speakButton(x.d, lang), kn, starButton('word', lang, x.d, () => wordItem(fake, ctx)));
+        row.append(top, h('div', 'sg-wl-m', [x.m, x.pos].filter(Boolean).join(' · ')));
+        if (line) {
+          const ex = h('button', 'sg-wl-ex', line.text);
+          ex.title = 'Jump to this line';
+          ex.addEventListener('click', () => {
+            video.currentTime = line.start + t.offset + 0.01;
+          });
+          row.append(ex);
+        }
+        list.append(row);
+      }
+    };
+    box.addEventListener('change', draw);
+    draw();
+  }
 
   async function toggleKnown(ch, lang) {
     const r = await browser.storage.local.get('known');
@@ -1490,6 +1793,7 @@
     box.append(head);
     if (e.meanings && e.meanings.length) box.append(h('div', 'sg-ce-mean', e.meanings.join('; ')));
     if (e.here) box.append(h('div', 'sg-ce-here', e.here));
+    box.append(strokeBlock(ch, lang));
     if (e.parts && e.parts.length) {
       box.append(h('div', 'sg-g-h', 'Built from'));
       const parts = h('div', 'sg-ce-parts');
@@ -1694,6 +1998,7 @@
   async function openFind() {
     const p = ui.panel;
     p.guide.classList.remove('sg-show');
+    p.words.classList.remove('sg-show');
     p.find.classList.add('sg-show');
     const body = p.findBody;
     body.textContent = '';
