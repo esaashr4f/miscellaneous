@@ -42,6 +42,16 @@
     });
   }
 
+  $('openProgress').addEventListener('click', (e) => {
+    e.preventDefault();
+    browser.tabs.create({ url: browser.runtime.getURL('progress/progress.html') });
+    window.close();
+  });
+  browser.runtime.sendMessage({ type: 'seasonJobs' }).then((r) => {
+    const live = (r && r.jobs ? r.jobs : []).find((j) => j.status === 'processing' || j.status === 'downloading');
+    if (live) $('season').textContent = `Preparing ${live.show}, episodes ${live.from}–${live.to}: ${live.status}`;
+  });
+
   $('openReview').addEventListener('click', (e) => {
     e.preventDefault();
     browser.tabs.create({ url: browser.runtime.getURL('review/review.html') });
@@ -96,7 +106,9 @@
       const m = SG.MODELS.find((x) => id.startsWith(x.id));
       if (m) total += (u.input * m.inPrice + u.cacheRead * m.inPrice * 0.1 + u.output * m.outPrice) / 1e6;
     }
-    $('spend').textContent = `Estimated spend so far: $${total.toFixed(2)}`;
+    const month = await browser.runtime.sendMessage({ type: 'spend' });
+    const cap = Number(settings.monthlyCap) || 0;
+    $('spend').textContent = `This month: about $${(month ? month.spent : 0).toFixed(2)}${cap ? ` of your $${cap} cap` : ''} · all time: $${total.toFixed(2)}`;
   }
 
   fill();

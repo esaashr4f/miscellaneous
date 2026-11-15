@@ -45,6 +45,23 @@ main { max-width: 760px; margin: 0 auto; padding: 0 16px 60px; }
 .controls .g2 { border-color: var(--hard); color: var(--hard); }
 .controls .g3 { border-color: var(--good); color: var(--good); }
 .controls .g4 { border-color: var(--easy); color: var(--easy); }
+.line { font-size: 30px; line-height: 1.7; }
+.cloze { font-size: 30px; line-height: 1.7; }
+.cloze .blank { display: inline-block; min-width: 3em; border-bottom: 3px solid var(--accent); }
+.cloze mark { background: var(--soft); color: var(--text); padding: 0 3px; border-radius: 3px; }
+.hint { margin-top: 10px; color: var(--dim); font-size: 17px; }
+.words { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; margin: 10px 0; }
+.words b { font-weight: 500; }
+.words span.m { color: var(--dim); }
+.guide-link { color: var(--accent); }
+.pitch { text-align: center; margin: 6px 0; }
+.pa { display: inline-flex; align-items: flex-end; padding-top: 3px; font-size: 20px; }
+.pa-m { padding: 1px 1px 0; border-top: 2px solid transparent; line-height: 1.25; }
+.pa-h { border-top-color: #d9741a; }
+.pa-up { border-left: 2px solid #d9741a; }
+.pa-down { border-right: 2px solid #d9741a; }
+.pa-part { color: var(--dim); font-size: 0.75em; }
+.pa-n { margin-left: 5px; padding: 0 6px; border-radius: 8px; background: var(--soft); color: var(--accent); font-size: 13px; }
 .keyhint { text-align: center; color: var(--dim); font-size: 13px; margin-top: 10px; }
 .done h2 { margin: 30px 0 6px; }
 .done p { color: var(--dim); }

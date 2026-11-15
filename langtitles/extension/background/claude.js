@@ -70,8 +70,40 @@
     return message.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
   }
 
-  async function recordUsage(model, usage) {
+  function monthKey(now) {
+    const d = new Date(now || Date.now());
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
+
+  // Estimated cost of one response, from list prices (batch requests cost half).
+  function costOf(model, usage, batch) {
+    const m = SG.MODELS.find((x) => String(model).startsWith(x.id)) || SG.MODELS[0];
+    const input = (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0) * 1.25 + (usage.cache_read_input_tokens || 0) * 0.1;
+    const cost = (input * m.inPrice + (usage.output_tokens || 0) * m.outPrice) / 1e6;
+    return batch ? cost / 2 : cost;
+  }
+
+  async function spentThisMonth() {
+    const r = (await browser.storage.local.get('spend')).spend || {};
+    return r[monthKey()] || 0;
+  }
+
+  // Refuses new requests once this month's estimated spend reaches the cap set in Options.
+  async function capGuard(settings) {
+    const cap = Number(settings.monthlyCap) || 0;
+    if (cap <= 0) return;
+    const spent = await spentThisMonth();
+    if (spent >= cap) {
+      throw new LangtitlesError('cap', `This month's spending cap ($${cap.toFixed(2)}) is reached (about $${spent.toFixed(2)} spent). Raise it in the Langtitles options to continue.`);
+    }
+  }
+
+  async function recordUsage(model, usage, batch) {
     if (!usage) return;
+    const spend = (await browser.storage.local.get('spend')).spend || {};
+    const mk = monthKey();
+    spend[mk] = (spend[mk] || 0) + costOf(model, usage, batch);
+    await browser.storage.local.set({ spend });
     const stored = (await browser.storage.local.get('usage')).usage || {};
     const u = stored[model] || { input: 0, output: 0, cacheRead: 0, requests: 0 };
     u.input += (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
@@ -84,17 +116,35 @@
 
   // lines: array of strings. Resolves to { lang, lines: analysis[] } aligned with the input
   // (an entry is null when the model returned nothing usable for that line).
-  async function analyzeLines(settings, lines, context, langHint) {
+  // The request for one batch of lines; also used for batch (season) jobs.
+  function analysisParams(settings, lines, context, langHint) {
     const { prompt } = SG;
+    const params = baseParams(settings, 32000);
+    params.system = [
+      { type: 'text', text: prompt.systemPrompt(settings.nativeLang), cache_control: { type: 'ephemeral' } },
+    ];
+    params.messages = [{ role: 'user', content: prompt.userMessage(lines, context, langHint) }];
+    params.output_config.format = { type: 'json_schema', schema: prompt.ANALYSIS_SCHEMA };
+    return params;
+  }
+
+  // Turns the model's JSON into one analysis per input line (null where nothing usable came back).
+  function readAnalysis(text, count) {
+    const data = JSON.parse(text);
+    const out = new Array(count).fill(null);
+    for (const line of data.lines || []) {
+      if (Number.isInteger(line.i) && line.i >= 0 && line.i < count) {
+        out[line.i] = { lang: data.lang, tr: line.tr, lit: line.lit, pat: line.pat, notes: line.notes || [], w: line.w || [] };
+      }
+    }
+    return out;
+  }
+
+  async function analyzeLines(settings, lines, context, langHint) {
+    await capGuard(settings);
     let message;
     try {
-      const params = baseParams(settings, 32000);
-      params.system = [
-        { type: 'text', text: prompt.systemPrompt(settings.nativeLang), cache_control: { type: 'ephemeral' } },
-      ];
-      params.messages = [{ role: 'user', content: prompt.userMessage(lines, context, langHint) }];
-      params.output_config.format = { type: 'json_schema', schema: prompt.ANALYSIS_SCHEMA };
-      message = await getClient(settings).beta.messages.stream(params).finalMessage();
+      message = await getClient(settings).beta.messages.stream(analysisParams(settings, lines, context, langHint)).finalMessage();
     } catch (err) {
       throw describeError(err);
     }
@@ -105,23 +155,16 @@
     if (message.stop_reason === 'max_tokens') {
       throw new LangtitlesError('truncated', 'The annotation was cut off.');
     }
-    let data;
     try {
-      data = JSON.parse(textOf(message));
+      return readAnalysis(textOf(message), lines.length);
     } catch (e) {
       throw new LangtitlesError('parse', 'Claude returned an annotation that could not be read.');
     }
-    const out = new Array(lines.length).fill(null);
-    for (const line of data.lines || []) {
-      if (Number.isInteger(line.i) && line.i >= 0 && line.i < lines.length) {
-        out[line.i] = { lang: data.lang, tr: line.tr, lit: line.lit, pat: line.pat, notes: line.notes || [], w: line.w || [] };
-      }
-    }
-    return out;
   }
 
   // Streams plain text; onText receives each new piece as it arrives.
   async function streamText(settings, system, user, maxTokens, effort, onText) {
+    await capGuard(settings);
     try {
       const params = baseParams(settings, maxTokens);
       if (effort) params.output_config.effort = effort;
@@ -161,6 +204,7 @@
   // A structured dictionary entry for one kanji or hanzi.
   async function charEntry(settings, req) {
     const { prompt } = SG;
+    await capGuard(settings);
     let message;
     try {
       const params = baseParams(settings, 8000);
@@ -184,6 +228,7 @@
   // A vocabulary list for a whole episode, from its numbered lines.
   async function episodeWords(settings, lines) {
     const { prompt } = SG;
+    await capGuard(settings);
     let message;
     try {
       const params = baseParams(settings, 24000);
@@ -204,6 +249,94 @@
     }
   }
 
+  // A tutor's answer to a question about one line, with the conversation so far.
+  async function askLine(settings, req, onText) {
+    const { prompt } = SG;
+    await capGuard(settings);
+    try {
+      const params = baseParams(settings, 6000);
+      params.system = prompt.askSystemPrompt(settings.nativeLang);
+      params.messages = prompt.askMessages(req);
+      const stream = getClient(settings).beta.messages.stream(params);
+      stream.on('text', (delta) => onText(delta));
+      const message = await stream.finalMessage();
+      recordUsage(message.model || settings.model, message.usage).catch(() => {});
+      if (message.stop_reason === 'refusal') throw new LangtitlesError('refusal', 'Claude declined to answer that.');
+      return textOf(message);
+    } catch (err) {
+      throw describeError(err);
+    }
+  }
+
+  // A fresh fill-in-the-blank question for reviewing a grammar form.
+  async function grammarCloze(settings, req) {
+    const { prompt } = SG;
+    await capGuard(settings);
+    let message;
+    try {
+      const params = baseParams(settings, 6000);
+      params.output_config.effort = 'low';
+      params.system = prompt.clozeSystemPrompt(settings.nativeLang);
+      params.messages = [{ role: 'user', content: prompt.clozeUserMessage(req) }];
+      params.output_config.format = { type: 'json_schema', schema: prompt.CLOZE_SCHEMA };
+      message = await getClient(settings).beta.messages.stream(params).finalMessage();
+    } catch (err) {
+      throw describeError(err);
+    }
+    recordUsage(message.model || settings.model, message.usage).catch(() => {});
+    if (message.stop_reason !== 'end_turn') throw new LangtitlesError('parse', 'Could not make a question for this form.');
+    return JSON.parse(textOf(message));
+  }
+
+  // Message Batches: half price, results within 24 hours (usually under one). No streaming or fallbacks there.
+  async function batchCreate(settings, requests) {
+    await capGuard(settings);
+    try {
+      return await getClient(settings).messages.batches.create({ requests });
+    } catch (err) {
+      throw describeError(err);
+    }
+  }
+
+  async function batchRetrieve(settings, id) {
+    try {
+      return await getClient(settings).messages.batches.retrieve(id);
+    } catch (err) {
+      throw describeError(err);
+    }
+  }
+
+  // Calls onResult(custom_id, analyses-or-null) for each finished request.
+  async function batchResults(settings, id, counts, onResult) {
+    try {
+      for await (const r of await getClient(settings).messages.batches.results(id)) {
+        if (r.result.type !== 'succeeded') {
+          onResult(r.custom_id, null);
+          continue;
+        }
+        const msg = r.result.message;
+        recordUsage(msg.model || settings.model, msg.usage, true).catch(() => {});
+        let out = null;
+        try {
+          if (msg.stop_reason === 'end_turn') out = readAnalysis(textOf(msg), counts[r.custom_id] || 0);
+        } catch (e) {
+          out = null;
+        }
+        onResult(r.custom_id, out);
+      }
+    } catch (err) {
+      throw describeError(err);
+    }
+  }
+
+  // Batch requests take the plain request shape: no beta header and no fallbacks.
+  function batchAnalysisParams(settings, lines, context, langHint) {
+    const params = analysisParams(settings, lines, context, langHint);
+    const plain = {};
+    for (const k of Object.keys(params)) if (k !== 'betas' && k !== 'fallbacks') plain[k] = params[k];
+    return plain;
+  }
+
   // Cheapest possible round trip, used by the "Test key" button.
   async function testKey(settings) {
     try {
@@ -216,5 +349,5 @@
     }
   }
 
-  SG.claude = { analyzeLines, explainWord, explainForm, explainWordGuide, charEntry, episodeWords, testKey, describeError, LangtitlesError };
+  SG.claude = { spentThisMonth, monthKey, askLine, grammarCloze, batchCreate, batchRetrieve, batchResults, batchAnalysisParams, analyzeLines, explainWord, explainForm, explainWordGuide, charEntry, episodeWords, testKey, describeError, LangtitlesError };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

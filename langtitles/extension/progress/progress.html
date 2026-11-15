@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Progress</title>
+  <link rel="stylesheet" href="progress.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Progress</h1>
+      <nav><a href="../review/review.html">Review</a> · <a href="../bank/bank.html">Word bank</a> · <a href="../grammar/grammar.html">Library</a></nav>
+    </header>
+    <section class="tiles" id="tiles"></section>
+    <section class="chart-card">
+      <h2>Minutes watched</h2>
+      <p class="sub">Last 30 days, counting only time with subtitles Langtitles was showing.</p>
+      <div class="chart" id="minutes"></div>
+    </section>
+    <section class="chart-card">
+      <h2>Cards reviewed</h2>
+      <p class="sub">Last 30 days.</p>
+      <div class="chart" id="reviews"></div>
+    </section>
+    <section class="chart-card">
+      <h2>Words you know</h2>
+      <p class="sub">By language, last 30 days.</p>
+      <div id="known"></div>
+    </section>
+  </main>
+  <div class="tip" id="tip" role="status"></div>
+  <script src="../shared/settings.js"></script>
+  <script src="../shared/lang.js"></script>
+  <script src="../shared/srs.js"></script>
+  <script src="../background/cache.js"></script>
+  <script src="progress.js"></script>
+</body>
+</html>

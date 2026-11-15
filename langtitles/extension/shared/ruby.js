@@ -76,12 +76,30 @@
       }
       return w.r ? [{ t: s, r: w.r }] : null;
     }
+    if (lang === 'ko') {
+      // Hanja over the Sino-Korean syllables, like furigana in reverse.
+      if (validSegments(w.f, s) && w.f.some((x) => x.r && hanChars(x.r).length)) return w.f.map((x) => ({ t: x.t, r: hanChars(x.r).length ? x.r : '' }));
+      return null;
+    }
     return null;
+  }
+
+  // Mandarin tone of one pinyin syllable: 1-4, or 5 for the neutral tone.
+  function toneOf(syllable) {
+    const s = String(syllable || '').normalize('NFD');
+    if (/\u0304/.test(s)) return 1;
+    if (/\u0301/.test(s)) return 2;
+    if (/\u030c/.test(s)) return 3;
+    if (/\u0300/.test(s)) return 4;
+    const m = /([1-5])$/.exec(s);
+    return m ? Number(m[1]) : 5;
   }
 
   // A segment's reading is hidden when every kanji in it is one the learner knows.
   function showReading(seg, known) {
     if (!seg.r) return false;
+    // Korean: the hanja is the annotation, and the base text is Hangul.
+    if (hanChars(seg.r).length && !hanChars(seg.t).length) return true;
     const chars = hanChars(seg.t);
     if (!chars.length) return false;
     return !known || !chars.every((c) => known.has(c));
@@ -107,5 +125,5 @@
     return lines.join('\n') + '\n';
   }
 
-  SG.ruby = { isHan, hanChars, kataToHira, deriveFurigana, segmentsFor, showReading, ankiFurigana, toAnkiTsv };
+  SG.ruby = { toneOf, isHan, hanChars, kataToHira, deriveFurigana, segmentsFor, showReading, ankiFurigana, toAnkiTsv };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

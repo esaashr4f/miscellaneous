@@ -93,12 +93,18 @@
       const c = h('div', 'big char', card.text);
       c.lang = card.lang;
       box.append(c);
+    } else if (card.kind === 'line') {
+      const l = h('div', 'line', card.text);
+      l.lang = card.lang;
+      box.append(l);
+    } else if (card.kind === 'grammar') {
+      grammarFront(box);
     } else {
       const w = h('div', 'big', card.text);
       w.lang = card.lang;
       box.append(w);
     }
-    const ex = example(card);
+    const ex = card.kind === 'word' || card.kind === 'char' ? example(card) : null;
     if (ex) box.append(ex);
     const controls = $('controls');
     controls.textContent = '';
@@ -141,7 +147,33 @@
     const box = $('card');
     box.textContent = '';
     const ans = h('div');
-    if (card.kind === 'char') {
+    if (card.kind === 'line') {
+      const L = card.line || {};
+      const l = h('div', 'line', card.text);
+      l.lang = card.lang;
+      box.append(l);
+      ans.className = 'answer';
+      ans.append(h('div', 'meaning', L.tr || ''));
+      if (L.lit) ans.append(h('div', 'tr', L.lit));
+      const sayBtn = h('button', 'say', '🔊 Hear it');
+      sayBtn.addEventListener('click', () => say(card.text, card.lang));
+      const center = h('div', '');
+      center.style.textAlign = 'center';
+      center.append(sayBtn);
+      ans.append(center);
+      if (Array.isArray(L.w) && L.w.length) {
+        const words = h('div', 'words');
+        for (const w of L.w) {
+          const one = h('span');
+          one.append(h('b', '', w.s), document.createTextNode(w.r ? ` ${w.r} ` : ' '), h('span', 'm', w.m || ''));
+          words.append(one);
+        }
+        ans.append(words);
+      }
+      for (const n of L.notes || []) ans.append(h('div', 'note', n));
+    } else if (card.kind === 'grammar') {
+      grammarBack(box, ans);
+    } else if (card.kind === 'char') {
       const e = card.entry || {};
       const c = h('div', 'big char', card.text);
       c.lang = card.lang;
@@ -171,6 +203,14 @@
       ans.className = 'answer';
       if (w.r && !(w.s === card.text && w.f && w.f.some((x) => x.r))) ans.append(h('div', 'reading', w.r));
       ans.append(h('div', 'meaning', w.m || ''));
+      if (card.lang === 'ja' && settings.pitchAccent) {
+        const pitch = h('div', 'pitch');
+        ans.append(pitch);
+        browser.runtime.sendMessage({ type: 'pitch', items: [{ d: w.d || card.text, r: w.r, s: w.s }] }).then((res) => {
+          const r = res && res.results && res.results[0];
+          if (r) r.a.slice(0, 2).forEach((acc) => pitch.append(SG.pitch.render(r.r, acc)));
+        });
+      }
       const sayBtn = h('button', 'say', '🔊 Hear it');
       sayBtn.addEventListener('click', () => say(w.s || card.text, card.lang));
       const center = h('div', '');
@@ -206,8 +246,73 @@
     });
   }
 
+  // Grammar cards: a new fill-in-the-blank sentence from Claude each time.
+  let cloze = null;
+
+  async function grammarFront(box) {
+    box.append(h('div', 'hint', `Grammar: ${card.name || card.text}`));
+    const q = h('div', 'cloze', 'Making a question…');
+    q.lang = card.lang;
+    box.append(q);
+    const forCard = card;
+    cloze = null;
+    const ctx = (card.contexts || [])[0];
+    const res = await browser.runtime.sendMessage({
+      type: 'grammarCloze', k: card.text, name: card.name, lang: card.lang, example: ctx ? ctx.sentence : '', avoid: card.recent || [],
+    });
+    if (card !== forCard) return;
+    if (!res || res.error || !res.q) {
+      q.textContent = (res && res.error) || 'Could not make a question. Grade from memory of the guide, or skip with Good.';
+      return;
+    }
+    cloze = res.q;
+    q.textContent = '';
+    const parts = cloze.sentence.split('＿＿');
+    parts.forEach((part, i) => {
+      if (i) q.append(h('span', 'blank', '\u00a0'));
+      q.append(document.createTextNode(part));
+    });
+    box.append(h('div', 'hint', cloze.hint));
+  }
+
+  function grammarBack(box, ans) {
+    box.append(h('div', 'hint', `Grammar: ${card.name || card.text}`));
+    if (!cloze) {
+      box.append(h('div', 'tr', 'No question this time.'));
+    } else {
+      const q = h('div', 'cloze');
+      q.lang = card.lang;
+      const parts = cloze.sentence.split('＿＿');
+      parts.forEach((part, i) => {
+        if (i) q.append(h('mark', '', cloze.answer));
+        q.append(document.createTextNode(part));
+      });
+      box.append(q);
+      ans.className = 'answer';
+      ans.append(h('div', 'tr', cloze.translation));
+      if (cloze.contrast) ans.append(h('div', 'meaning', `Not ${card.name || card.text} here: ${cloze.answer}`));
+      ans.append(h('div', 'note', cloze.why));
+      const full = parts.join(cloze.answer);
+      card.recent = [full].concat(card.recent || []).slice(0, 8);
+      const sayBtn = h('button', 'say', '🔊 Hear it');
+      sayBtn.addEventListener('click', () => say(full, card.lang));
+      const center = h('div', '');
+      center.style.textAlign = 'center';
+      center.append(sayBtn);
+      ans.append(center);
+    }
+    const link = h('a', 'guide-link', 'Open the guide');
+    link.href = '../grammar/grammar.html#' + encodeURIComponent(card.text);
+    link.target = '_blank';
+    const c2 = h('div', '');
+    c2.style.textAlign = 'center';
+    c2.append(link);
+    ans.append(c2);
+  }
+
   async function markKnown(item) {
     const r = await browser.storage.local.get(['known', 'knownWords']);
+    if (item.kind === 'line' || item.kind === 'grammar') return;
     if (item.kind === 'char') {
       const known = Object.assign({ ja: '', zh: '' }, r.known);
       if (!known[item.lang].includes(item.text)) known[item.lang] += item.text;
@@ -229,6 +334,7 @@
     const wasMature = SG.srs.isMature(card.srs);
     card.srs = SG.srs.schedule(card.srs, g, now);
     await browser.runtime.sendMessage({ type: 'bankPut', items: [card] });
+    browser.runtime.sendMessage({ type: 'reviewed' });
     if (wasNew) await countNewDone();
     if (!wasMature && SG.srs.isMature(card.srs) && settings.autoKnownFromReview) await markKnown(card);
     reviewedNow += 1;

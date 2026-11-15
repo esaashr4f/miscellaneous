@@ -41,6 +41,8 @@
     sel.value = langs.includes(cur) ? cur : '';
     $('nWord').textContent = items.filter((x) => x.kind === 'word').length || '';
     $('nChar').textContent = items.filter((x) => x.kind === 'char').length || '';
+    $('nLine').textContent = items.filter((x) => x.kind === 'line').length || '';
+    $('nGrammar').textContent = items.filter((x) => x.kind === 'grammar').length || '';
     $('nKnown').textContent = Array.from(known.ja + known.zh).length || '';
     const settings = await SG.loadSettings();
     const log = (await browser.storage.local.get('reviewLog')).reviewLog || {};
@@ -148,6 +150,16 @@
     head.append(del);
     card.append(head);
     if (w.m) card.append(h('div', 'meaning', w.m));
+    if (item.lang === 'ja') {
+      const pitchBox = h('div', 'pos');
+      card.append(pitchBox);
+      browser.runtime.sendMessage({ type: 'pitch', items: [{ d: w.d || item.text, r: w.r, s: w.s }] }).then((res) => {
+        const r = res && res.results && res.results[0];
+        if (!r) return;
+        pitchBox.append(document.createTextNode('Pitch: '));
+        r.a.slice(0, 2).forEach((acc) => pitchBox.append(SG.pitch.render(r.r, acc)));
+      });
+    }
     card.append(srsLine(item));
     if (w.pos) card.append(h('div', 'pos', w.pos));
     if (Array.isArray(w.p) && w.p.length > 1) {
@@ -270,6 +282,54 @@
     return card;
   }
 
+  function lineCard(item) {
+    const L = item.line || {};
+    const card = h('div', 'card');
+    const head = h('div', 'card-head');
+    const s = h('div', 'line-s');
+    s.lang = item.lang;
+    s.textContent = item.text;
+    head.append(s, h('span', 'spacer'), sayButton(item.text, item.lang));
+    const del = h('button', 'icon-btn', 'Remove');
+    del.addEventListener('click', () => remove(item));
+    head.append(del);
+    card.append(head);
+    if (L.tr) card.append(h('div', 'meaning', L.tr));
+    if (L.lit) card.append(h('div', 'note', L.lit));
+    card.append(srsLine(item));
+    if (Array.isArray(L.w) && L.w.length) {
+      const words = h('div', 'words');
+      for (const w of L.w) {
+        const one = h('span');
+        one.append(h('b', '', w.s), document.createTextNode(' '), h('span', 'm', w.m || ''));
+        words.append(one);
+      }
+      card.append(words);
+    }
+    for (const n of L.notes || []) card.append(h('div', 'note', n));
+    contexts(item, card);
+    return card;
+  }
+
+  function grammarCard(item) {
+    const card = h('div', 'card');
+    const head = h('div', 'card-head');
+    head.append(h('span', 'head-word', item.name || item.text), h('span', 'lang-tag', SG.lang.langName(item.lang)), h('span', 'spacer'));
+    const del = h('button', 'icon-btn', 'Remove');
+    del.addEventListener('click', () => remove(item));
+    head.append(del);
+    card.append(head);
+    card.append(srsLine(item));
+    const chips = h('div', 'chips');
+    const a = h('a', 'chip', 'Open the guide');
+    a.href = '../grammar/grammar.html#' + encodeURIComponent(item.text);
+    chips.append(a);
+    card.append(chips);
+    card.append(h('div', 'note', 'In review, each card is a new fill-in-the-blank sentence, sometimes one where a form often confused with this one is right.'));
+    contexts(item, card);
+    return card;
+  }
+
   function knownPanel() {
     const wrap = document.createDocumentFragment();
     for (const lang of ['ja', 'zh']) {
@@ -351,12 +411,16 @@
     if (!list.length) {
       main.append(h('div', 'empty', items.some((x) => x.kind === tab)
         ? 'Nothing matches.'
-        : tab === 'word'
-          ? 'No saved words yet. While watching, hover a word and click ☆ to save it.'
-          : 'No saved characters yet. While watching, hover a word, click one of its characters, then click ☆.'));
+        : {
+          word: 'No saved words yet. While watching, hover a word and click ☆ to save it.',
+          char: 'No saved characters yet. While watching, hover a word, click one of its characters, then click ☆.',
+          line: 'No saved lines yet. In the side panel (G), click ☆ Save line under a line.',
+          grammar: 'No grammar forms yet. Each grammar form you open a guide for is added here for review (this can be turned off in Options).',
+        }[tab]));
       return;
     }
-    for (const item of list) main.append(tab === 'word' ? wordCard(item) : charCard(item));
+    const make = { word: wordCard, char: charCard, line: lineCard, grammar: grammarCard }[tab];
+    for (const item of list) main.append(make(item));
   }
 
   function download(name, text, type) {
@@ -396,6 +460,21 @@
         }),
         'langtitles',
       );
+    } else if (tab === 'line') {
+      tsv = SG.ruby.toAnkiTsv(
+        ['Sentence', 'Translation', 'Word for word', 'Words', 'Notes', 'Source'],
+        list.map((x) => {
+          const L = x.line || {};
+          return [
+            x.text, L.tr || '', L.lit || '',
+            (L.w || []).map((w) => `${w.s}${w.r ? ' (' + w.r + ')' : ''} — ${w.m || ''}`).join('<br>'),
+            (L.notes || []).join('<br>'), first(x).show || '',
+          ];
+        }),
+        'langtitles',
+      );
+    } else if (tab === 'grammar') {
+      tsv = SG.ruby.toAnkiTsv(['Form', 'Example'], list.map((x) => [x.name || x.text, first(x).sentence || '']), 'langtitles');
     } else {
       tsv = SG.ruby.toAnkiTsv(
         ['Character', 'Readings', 'Meanings', 'Parts', 'How it is built', 'Words', 'Example'],
@@ -414,7 +493,7 @@
         'langtitles',
       );
     }
-    download(`langtitles-${tab === 'word' ? 'words' : 'characters'}.txt`, tsv, 'text/tab-separated-values;charset=utf-8');
+    download(`langtitles-${{ word: 'words', char: 'characters', line: 'lines', grammar: 'grammar' }[tab]}.txt`, tsv, 'text/tab-separated-values;charset=utf-8');
     toast(`Exported ${list.length}. In Anki: File → Import, choose the file.`);
   });
 

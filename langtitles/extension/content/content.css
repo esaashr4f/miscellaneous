@@ -495,3 +495,75 @@ langtitles-root .sg-wl-ex { all: unset; display: block; margin-top: 2px; color: 
 langtitles-root .sg-wl-ex:hover { color: var(--sg-gloss); }
 langtitles-root .sg-form-word { border-color: rgba(159, 215, 255, 0.5); color: var(--sg-read); }
 langtitles-root .sg-form-word.sg-on { background: rgba(159, 215, 255, 0.18); border-color: var(--sg-read); }
+
+/* ---------- tones, hanja ---------- */
+langtitles-root ruby.sg-ruby rt.sg-tone1 { color: #ff6b6b; }
+langtitles-root ruby.sg-ruby rt.sg-tone2 { color: #5fd35f; }
+langtitles-root ruby.sg-ruby rt.sg-tone3 { color: #6aaeff; }
+langtitles-root ruby.sg-ruby rt.sg-tone4 { color: #c58aff; }
+langtitles-root ruby.sg-ruby rt.sg-tone5 { color: #a6a8b3; }
+langtitles-root ruby.sg-ruby rt.sg-hanja { color: #e8d3a8; font-size: 0.5em; }
+
+/* ---------- pitch accent ---------- */
+langtitles-root .sg-pitch { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3em 0.8em; margin-top: 0.35em; }
+langtitles-root .sg-pitch-l { color: var(--sg-dim); font-size: 0.85em; }
+langtitles-root .pa { display: inline-flex; align-items: flex-end; padding-top: 3px; font-size: 1.05em; }
+langtitles-root .pa-m { padding: 1px 1px 0; border-top: 2px solid transparent; line-height: 1.25; }
+langtitles-root .pa-h { border-top-color: #ff9f45; }
+langtitles-root .pa-up { border-left: 2px solid #ff9f45; }
+langtitles-root .pa-down { border-right: 2px solid #ff9f45; }
+langtitles-root .pa-part { color: var(--sg-dim); font-size: 0.75em; }
+langtitles-root .pa-n { margin-left: 0.35em; padding: 0 0.35em; border-radius: 0.6em; background: rgba(255, 159, 69, 0.18); color: #ffb470; font-size: 0.7em; }
+
+/* ---------- the same word in other languages ---------- */
+langtitles-root .sg-pop-x { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35em 0.9em; margin-top: 0.6em; }
+langtitles-root .sg-x { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0.35em; }
+langtitles-root .sg-x-lang { color: var(--sg-dim); font-size: 0.8em; }
+langtitles-root .sg-x-w { font-size: 1.15em; }
+langtitles-root .sg-x-r { color: var(--sg-read); font-size: 0.9em; }
+langtitles-root .sg-x-note { color: var(--sg-dim); font-size: 0.85em; }
+
+/* ---------- ask, save line, coverage, season ---------- */
+langtitles-root .sg-d-save { display: inline-flex; align-items: center; gap: 2px; color: var(--sg-dim); font-size: 12px; }
+langtitles-root .sg-d-save .sg-star { font-size: 17px; margin-left: 0; }
+langtitles-root .sg-ask-thread { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+langtitles-root .sg-ask-q { align-self: flex-end; max-width: 90%; padding: 5px 9px; border-radius: 8px 8px 2px 8px; background: rgba(255, 216, 138, 0.16); }
+langtitles-root .sg-ask-a { max-width: 95%; padding: 5px 9px; border-radius: 8px 8px 8px 2px; background: rgba(255, 255, 255, 0.06); white-space: pre-wrap; }
+langtitles-root .sg-ask-a.sg-loading { color: var(--sg-dim); animation: sg-pulse 1.2s infinite; }
+langtitles-root .sg-ask-form { display: flex; gap: 6px; align-items: flex-end; }
+langtitles-root .sg-ask-in { flex: 1; min-height: 2.6em; resize: vertical; white-space: pre-wrap; }
+langtitles-root .sg-cov { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 8px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); }
+langtitles-root .sg-cov-n { font-size: 30px; font-weight: 700; color: var(--sg-gloss); font-variant-numeric: tabular-nums; }
+langtitles-root .sg-cov-t { color: #dcdde3; font-size: 12.5px; }
+langtitles-root .sg-season { margin-top: 14px; padding-top: 4px; border-top: 1px solid var(--sg-line); }
+langtitles-root .sg-jobs { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+langtitles-root .sg-job { padding: 5px 8px; border-radius: 5px; background: rgba(255, 255, 255, 0.04); }
+langtitles-root .sg-job-t { font-size: 12.5px; }
+langtitles-root .sg-job-s { color: var(--sg-dim); font-size: 11.5px; }
+
+/* ---------- phones and tablets ---------- */
+langtitles-root.sg-touch .sg-toggle { opacity: 0.85; }
+langtitles-root .sg-pop-close {
+  all: unset;
+  float: right;
+  margin: -0.3em -0.3em 0 0.4em;
+  padding: 0 0.4em;
+  color: var(--sg-dim);
+  font-size: 1.6em;
+  line-height: 1;
+  cursor: pointer;
+}
+langtitles-root.sg-touch .sg-tok { padding: 0.1em 0.18em; }
+langtitles-root.sg-touch .sg-btn { padding: 0.45em 0.8em; }
+@media (max-width: 700px) {
+  langtitles-root { --sg-panel-w: 100%; }
+  langtitles-root.sg-panel-open .sg-sub { display: none !important; }
+  langtitles-root .sg-pop { width: 94% !important; left: 3% !important; }
+}
+
+/* how an inflected word builds up, piece by piece */
+langtitles-root .sg-build { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25em 0.45em; margin-top: 0.55em; padding: 0.4em 0.55em; border-radius: 0.35em; background: rgba(255, 255, 255, 0.04); }
+langtitles-root .sg-build-step { display: inline-flex; flex-direction: column; align-items: center; }
+langtitles-root .sg-build-t { font-size: 1.05em; }
+langtitles-root .sg-build-m { color: var(--sg-dim); font-size: 0.8em; text-align: center; }
+langtitles-root .sg-build-arrow { color: var(--sg-gloss); }

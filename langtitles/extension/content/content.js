@@ -211,7 +211,9 @@
       onAnalyzed(msg);
     } else if (msg.type === 'deepDelta' || msg.type === 'deepDone' || msg.type === 'deepError') {
       onDeep(msg);
-    } else if (['tabInfo', 'subsFound', 'subLoaded', 'charInfo', 'bankSaved', 'bankStatus', 'stroke', 'episodeWords'].includes(msg.type)) {
+    } else if (msg.type === 'askDelta' || msg.type === 'askDone' || msg.type === 'askError') {
+      onAsk(msg);
+    } else if (['tabInfo', 'subsFound', 'subLoaded', 'charInfo', 'bankSaved', 'bankStatus', 'stroke', 'episodeWords', 'pitch', 'seasonStarted', 'seasonJobs'].includes(msg.type)) {
       const cb = subReqs.get(msg.reqId);
       subReqs.delete(msg.reqId);
       if (cb) cb(msg);
@@ -496,6 +498,7 @@
   function buildUI() {
     if (ui) return;
     const root = h('langtitles-root');
+    if (typeof matchMedia === 'function' && matchMedia('(hover: none)').matches) root.classList.add('sg-touch');
     root.setAttribute('translate', 'no');
     const sub = h('div', 'sg-sub');
     const line = h('div', 'sg-line');
@@ -742,7 +745,8 @@
     }
     let ready = 0;
     for (const k of t.keys) if (analyses.has(k)) ready++;
-    ui.panel.status.textContent = `${ready}/${t.cues.length} lines ready${inflight ? ' · working' : ''}`;
+    const cov = coverage.get(t.id);
+    ui.panel.status.textContent = `${ready}/${t.cues.length} lines ready${inflight ? ' · working' : ''}${cov ? ` · ${cov.pct}% known` : ''}`;
   }
 
   // ------------------------------------------------------------ subtitle box
@@ -797,7 +801,10 @@
   }
 
   function readingsOn(lang) {
-    return lang === 'ja' ? Boolean(settings.furigana) : lang === 'zh' ? Boolean(settings.pinyin) : false;
+    if (lang === 'ja') return Boolean(settings.furigana);
+    if (lang === 'zh') return Boolean(settings.pinyin);
+    if (lang === 'ko') return Boolean(settings.hanja);
+    return false;
   }
 
   function knownFor(lang) {
@@ -839,7 +846,8 @@
     for (const seg of segs) {
       if (SG.ruby.showReading(seg, knownSet)) {
         const ruby = h('ruby', 'sg-ruby');
-        ruby.append(text(seg.t, pos), h('rt', '', seg.r));
+        const rt = h('rt', lang === 'zh' && settings.toneColors ? 'sg-tone' + SG.ruby.toneOf(seg.r) : lang === 'ko' ? 'sg-hanja' : '', seg.r);
+        ruby.append(text(seg.t, pos), rt);
         surf.append(ruby);
       } else {
         surf.append(text(seg.t, pos));
@@ -942,6 +950,7 @@
 
   function scheduleLeave() {
     clearTimeout(leaveTimer);
+    if (touchMode) return;
     leaveTimer = setTimeout(() => {
       hidePop();
       if (autoPaused && settings.resumeOnLeave && video && video.paused) {
@@ -975,6 +984,20 @@
     const pop = ui.pop;
     pop.textContent = '';
     pop.classList.remove('sg-wide');
+    if (touchMode) {
+      const close = h('button', 'sg-pop-close', '×');
+      close.title = 'Close and keep watching';
+      close.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hidePop();
+        if (autoPaused && video && video.paused) {
+          const pr = video.play();
+          if (pr && pr.catch) pr.catch(() => {});
+        }
+        autoPaused = false;
+      });
+      pop.append(close);
+    }
 
     const head = h('div', 'sg-pop-head');
     head.append(h('span', 'sg-pop-word', w.s));
@@ -983,6 +1006,7 @@
     pop.append(head);
     const meta = [w.pos, w.d && !sameText(w.d, w.s) ? 'dictionary form: ' + w.d : ''].filter(Boolean).join(' · ');
     if (meta) pop.append(h('div', 'sg-pop-meta', meta));
+    if (ctx.lang === 'ja' && settings.pitchAccent) pop.append(pitchBlock(w));
     pop.append(h('div', 'sg-pop-mean', w.m || ''));
 
     const parts = Array.isArray(w.p) ? w.p : [];
@@ -994,6 +1018,18 @@
         table.append(row);
       });
       pop.append(table);
+    }
+    if (Array.isArray(w.b) && w.b.length > 1) {
+      const chain = h('div', 'sg-build');
+      w.b.forEach((step, i) => {
+        if (i) chain.append(h('span', 'sg-build-arrow', '→'));
+        const one = h('span', 'sg-build-step');
+        const form = h('span', 'sg-build-t', step.t);
+        form.lang = ctx.lang;
+        one.append(form, h('span', 'sg-build-m', step.m));
+        chain.append(one);
+      });
+      pop.append(chain);
     }
     if (w.n) pop.append(h('div', 'sg-pop-note', w.n));
 
@@ -1028,6 +1064,20 @@
         post({ type: 'openLibrary', k: on ? on.dataset.k : '' });
       });
       row.append(lib);
+      pop.append(row);
+    }
+    if (Array.isArray(w.x) && w.x.length) {
+      const row = h('div', 'sg-pop-x');
+      row.append(h('span', 'sg-pop-forms-label', 'Also in'));
+      for (const x of w.x) {
+        const item = h('span', 'sg-x');
+        const word = h('span', 'sg-x-w', x.w);
+        word.lang = x.lang;
+        item.append(h('span', 'sg-x-lang', { ja: 'Japanese', zh: 'Chinese', ko: 'Korean' }[x.lang] || x.lang), word);
+        if (x.r) item.append(h('span', 'sg-x-r', x.r));
+        if (x.note) item.append(h('span', 'sg-x-note', x.note));
+        row.append(item);
+      }
       pop.append(row);
     }
     const chars = ctx.lang === 'ja' || ctx.lang === 'zh' ? SG.ruby.hanChars(w.s) : [];
@@ -1195,8 +1245,17 @@
       await setWordsKnown(lang, words, true);
       showToast(`Marked ${words.length} word${words.length === 1 ? '' : 's'} known.`);
     });
-    lineTools.append(say, allKnown);
+    const lineStar = starButton('line', lang, cue.text, async () => ({
+      kind: 'line', lang, text: cue.text,
+      line: { tr: a.tr, lit: a.lit, notes: a.notes || [], w: (a.w || []).map((w) => ({ s: w.s, r: w.r, f: SG.ruby.segmentsFor(w, lang), d: w.d, m: w.m, pos: w.pos })) },
+      context: await lineContext({ sentence: cue.text, translation: a.tr, lang, time: cue.start + (active() ? active().offset : 0) }),
+    }));
+    lineStar.title = 'Save this line as a review card';
+    const saveLbl = h('span', 'sg-d-save');
+    saveLbl.append(lineStar, document.createTextNode(' Save line'));
+    lineTools.append(say, allKnown, saveLbl);
     box.append(lineTools);
+    box.append(askBox(cue, a));
     if (a.lit) {
       box.append(h('div', 'sg-section', 'Word for word'), h('div', 'sg-d-lit', a.lit));
     }
@@ -1656,6 +1715,12 @@
       return;
     }
     const all = res.words || [];
+    const cov = computeCoverage(all, lang);
+    coverage.set(t.id, cov);
+    renderStatus();
+    const head = h('div', 'sg-cov');
+    head.append(h('div', 'sg-cov-n', cov.pct + '%'), h('div', 'sg-cov-t', `of the words in this episode are ones you know (counting each time a word is used). ${cov.pct >= 90 ? 'Comfortable.' : cov.pct >= 75 ? 'A good level to learn from.' : 'Challenging: studying the words below first will help.'}`));
+    body.append(head);
     const status = h('div', 'sg-find-status');
     const hideKnown = h('label', 'sg-f-check');
     const box = h('input');
@@ -1713,17 +1778,16 @@
   function toggleReadings() {
     const t = active();
     const lang = t ? t.lang : '';
-    let patch;
-    if (lang === 'ja') patch = { furigana: !settings.furigana };
-    else if (lang === 'zh') patch = { pinyin: !settings.pinyin };
-    else {
-      showToast('Readings are shown over Japanese kanji (furigana) and Chinese characters (pinyin).');
+    let patch = null;
+    const which = { ja: ['furigana', 'Furigana'], zh: ['pinyin', 'Pinyin'], ko: ['hanja', 'Hanja'] }[lang];
+    if (!which) {
+      showToast('Readings are shown over Japanese kanji (furigana), Chinese characters (pinyin) and Sino-Korean words (hanja).');
       return;
     }
+    patch = { [which[0]]: !settings[which[0]] };
     Object.assign(settings, patch);
     post({ type: 'saveSettings', patch });
-    const on = lang === 'ja' ? settings.furigana : settings.pinyin;
-    showToast(`${lang === 'ja' ? 'Furigana' : 'Pinyin'} ${on ? 'on' : 'off'} (R).`);
+    showToast(`${which[1]} ${settings[which[0]] ? 'on' : 'off'} (R).`);
     refreshLine();
   }
 
@@ -1866,6 +1930,142 @@
     video.currentTime = Math.max(0, pendingSeek - 1.5);
     pendingSeek = null;
     post({ type: 'seekDone' });
+  }
+
+  // ------------------------------------------------------------ pitch accent
+
+  const pitchCache = new Map();
+
+  function pitchBlock(w) {
+    const box = h('div', 'sg-pitch');
+    const key = (w.d || w.s) + '|' + (w.r || '');
+    const draw = (res) => {
+      if (!res) return;
+      const reading = w.s !== w.d && w.d ? '' : w.r;
+      const kana = res.r || reading;
+      box.append(h('span', 'sg-pitch-l', w.d && w.d !== w.s ? `Pitch (${w.d})` : 'Pitch'));
+      res.a.slice(0, 2).forEach((acc) => box.append(SG.pitch.render(kana, acc)));
+    };
+    if (pitchCache.has(key)) draw(pitchCache.get(key));
+    else {
+      request({ type: 'pitch', items: [{ d: w.d, r: w.r, s: w.s }] }).then((res) => {
+        const r = res.results && res.results[0];
+        pitchCache.set(key, r || null);
+        draw(r);
+      });
+    }
+    return box;
+  }
+
+  // ------------------------------------------------------- ask about a line
+
+  const askThreads = new Map(); // line key -> [{ q, a }]
+  const askTargets = new Map(); // reqId -> { el, text, turn }
+
+  function askBox(cue, a) {
+    const key = shownKey;
+    const wrap = h('div', 'sg-ask');
+    wrap.append(h('div', 'sg-section', 'Ask about this line'));
+    const thread = h('div', 'sg-ask-thread');
+    const turns = askThreads.get(key) || [];
+    const addTurn = (turn) => {
+      const q = h('div', 'sg-ask-q', turn.q);
+      const ans = h('div', 'sg-ask-a', turn.a || '…');
+      thread.append(q, ans);
+      return ans;
+    };
+    turns.forEach(addTurn);
+    const form = h('div', 'sg-ask-form');
+    const input = h('textarea', 'sg-in sg-ask-in');
+    input.rows = 2;
+    input.placeholder = 'Why は and not が here? Could I say this to my boss?';
+    const go = h('button', 'sg-btn sg-go', 'Ask');
+    const send = () => {
+      const question = input.value.trim();
+      if (!question) return;
+      input.value = '';
+      const t = active();
+      const idx = shownIndex;
+      const turn = { q: question, a: '' };
+      const list = askThreads.get(key) || [];
+      const history = list.filter((x) => x.a).map((x) => ({ q: x.q, a: x.a }));
+      list.push(turn);
+      askThreads.set(key, list);
+      const ansEl = addTurn(turn);
+      ansEl.classList.add('sg-loading');
+      const reqId = 'q' + ++reqSeq;
+      askTargets.set(reqId, { el: ansEl, text: '', turn });
+      post({
+        type: 'ask', reqId, question, history,
+        sentence: cue.text, translation: a.tr,
+        words: (a.w || []).map((w) => `${w.s} = ${w.m}`).join('; '),
+        before: t ? t.cues.slice(Math.max(0, idx - 3), idx).map((c) => c.text) : [],
+        after: t ? t.cues.slice(idx + 1, idx + 3).map((c) => c.text) : [],
+        show: tabTitle || '',
+      });
+    };
+    go.addEventListener('click', send);
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    });
+    form.append(input, go);
+    wrap.append(thread, form);
+    return wrap;
+  }
+
+  function onAsk(msg) {
+    const t = askTargets.get(msg.reqId);
+    if (!t) return;
+    t.el.classList.remove('sg-loading');
+    if (msg.type === 'askDelta') {
+      t.text += msg.delta;
+      t.el.textContent = t.text;
+    } else if (msg.type === 'askDone') {
+      t.turn.a = msg.text;
+      t.el.textContent = msg.text;
+      askTargets.delete(msg.reqId);
+    } else {
+      t.el.textContent = msg.message;
+      askTargets.delete(msg.reqId);
+    }
+  }
+
+  // ---------------------------------------------- how much of the episode you know
+
+  const coverage = new Map(); // track id -> { pct, known, total }
+
+  function computeCoverage(words, lang) {
+    let total = 0;
+    let knownN = 0;
+    for (const x of words) {
+      total += x.count || 1;
+      if (knownWords[lang] && knownWords[lang].has(x.d)) knownN += x.count || 1;
+    }
+    return { pct: total ? Math.round((knownN / total) * 100) : 0, total, known: knownN };
+  }
+
+  // --------------------------------------------------------- time watched
+
+  let watchedSecs = 0;
+  let watchedLast = null;
+
+  function trackWatching() {
+    const t = active();
+    if (!video || video.paused || !t) {
+      watchedLast = null;
+      return;
+    }
+    const now = video.currentTime;
+    if (watchedLast != null && now > watchedLast && now - watchedLast < 3) watchedSecs += now - watchedLast;
+    watchedLast = now;
+    if (watchedSecs >= 60) {
+      post({ type: 'watched', lang: t.lang, minutes: Math.floor(watchedSecs / 60) });
+      watchedSecs %= 60;
+    }
   }
 
   // --------------------------------------------------------- subtitle sites
@@ -2126,6 +2326,60 @@
       });
     }
     if (ep.title || ep.tmdbId || ep.imdbId) run();
+    body.append(seasonSection(ep, lang));
+  }
+
+  // Prepare a whole season ahead through the batch API (half price, ready within a day).
+  function seasonSection(ep, langSel) {
+    const box = h('div', 'sg-season');
+    box.append(h('div', 'sg-section', 'Prepare a whole season'));
+    if (!(ep.tmdbId || ep.imdbId) || ep.type !== 'tv') {
+      box.append(h('div', 'sg-find-status', 'Available when the episode is detected from the player (a TV show with an id).'));
+      return box;
+    }
+    box.append(h('div', 'sg-find-status', 'Downloads subtitles for each episode and prepares every line at half price through the batch API. Results are usually ready within an hour (at most a day). Each episode uses one subtitle download (OpenSubtitles allows 5 a day, or 20 signed in; SubDL more).'));
+    const grid = h('div', 'sg-form-grid');
+    const from = h('input', 'sg-in sg-num');
+    from.type = 'number';
+    from.min = '1';
+    from.value = String(ep.episode || 1);
+    const to = h('input', 'sg-in sg-num');
+    to.type = 'number';
+    to.min = '1';
+    to.value = String((ep.episode || 1) + 11);
+    grid.append(field('From episode', from), field('To episode', to));
+    const go = h('button', 'sg-btn sg-go', 'Prepare');
+    const jobs = h('div', 'sg-jobs');
+    const showJobs = async () => {
+      const res = await request({ type: 'seasonJobs' });
+      jobs.textContent = '';
+      for (const j of (res.jobs || []).slice(0, 4)) {
+        const row = h('div', 'sg-job');
+        const p = j.progress ? ` · ${j.progress.succeeded || 0} of ${(j.progress.succeeded || 0) + (j.progress.processing || 0) + (j.progress.errored || 0)} requests back` : '';
+        row.append(h('div', 'sg-job-t', `${j.show}, episodes ${j.from}–${j.to}`), h('div', 'sg-job-s', `${j.status}${j.lines ? ` · ${j.lines} lines` : ''}${j.ready ? ` · ${j.ready} ready` : ''}${p}`));
+        jobs.append(row);
+      }
+    };
+    go.addEventListener('click', async () => {
+      const a = Number(from.value);
+      const b = Number(to.value);
+      if (!(a >= 1 && b >= a && b - a < 40)) {
+        showToast('Pick a range of up to 40 episodes.');
+        return;
+      }
+      go.disabled = true;
+      showToast('Preparing the season in the background. You can keep watching.');
+      const base = { type: 'tv', tmdbId: ep.tmdbId, imdbId: ep.imdbId, title: ep.title };
+      request({ type: 'seasonStart', episode: base, season: ep.season == null ? 1 : ep.season, from: a, to: b, langs: [langSel.value] }).then(() => {
+        go.disabled = false;
+        showJobs();
+      });
+      setTimeout(showJobs, 1500);
+    });
+    for (const input of [from, to]) input.addEventListener('keydown', (e) => e.stopPropagation());
+    box.append(grid, go, jobs);
+    showJobs();
+    return box;
   }
 
   // ------------------------------------------------------------------ start
@@ -2146,6 +2400,9 @@
     });
   }
 
+  // Phones and tablets: no hover, so taps open words and a close button resumes playback.
+  const touchMode = typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
+
   scan();
   setInterval(scan, 1500);
   setInterval(() => {
@@ -2161,6 +2418,7 @@
     lastTickTime = now;
     pump();
     reportState();
+    trackWatching();
     seekIfPending();
     maybeAutoFind();
   }, 1000);

@@ -95,6 +95,9 @@
       <label class="check"><input id="furigana" type="checkbox"> Furigana (hiragana) over kanji you haven't marked as known</label>
       <label class="check"><input id="pinyin" type="checkbox"> Pinyin over Chinese characters</label>
       <label class="check"><input id="hideKnownPinyin" type="checkbox"> No pinyin over Chinese characters you've marked as known</label>
+      <label class="check"><input id="toneColors" type="checkbox"> Colour pinyin by tone (1 red, 2 green, 3 blue, 4 purple, neutral grey)</label>
+      <label class="check"><input id="hanja" type="checkbox"> Hanja over Sino-Korean words</label>
+      <label class="check"><input id="pitchAccent" type="checkbox"> Japanese pitch accent in the hover popup, word lists and review (data: Kanjium, downloaded once, about 3 MB)</label>
       <small class="block">Press <kbd>R</kbd> while watching to switch readings on or off. Mark characters as known from the hover popup or the word bank.</small>
       <label class="check"><input id="showRoles" type="checkbox"> Sentence roles (subject, object, predicate…) under the words</label>
       <label class="check"><input id="showTranslation" type="checkbox"> Translation under the line</label>
@@ -129,6 +132,7 @@
         <span>New cards per day</span>
         <input id="newPerDay" type="number" min="0" max="200">
       </label>
+      <label class="check"><input id="addGrammarToReview" type="checkbox"> Add grammar forms to review when I open their guide (each review asks Claude for a new example sentence)</label>
       <label class="check"><input id="autoKnownFromReview" type="checkbox"> Count words and characters as known once learned in review (reviewed every 21 days or longer)</label>
       <small class="block">Known characters get no furigana; known words are not underlined as new.</small>
     </section>
@@ -170,6 +174,15 @@
         <ul id="disabledHosts" class="hosts"></ul>
         <small>Turn Langtitles off for the current site from the toolbar button.</small>
       </div>
+    </section>
+
+    <section>
+      <h2>Spending cap</h2>
+      <label class="field">
+        <span>Stop Claude requests once this month's estimated spend reaches (USD)</span>
+        <input id="monthlyCap" type="number" min="0" step="1">
+        <small>0 means no cap. The estimate uses list prices from the requests Langtitles makes, so your Anthropic bill can differ slightly. <span id="spentNow"></span></small>
+      </label>
     </section>
 
     <section>

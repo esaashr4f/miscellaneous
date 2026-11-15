@@ -4,7 +4,7 @@
   const SG = (root.SG = root.SG || {});
 
   // Bump when the prompt or schema changes so cached analyses from the old version are not reused.
-  const PROMPT_VERSION = 5;
+  const PROMPT_VERSION = 6;
   // Grammar guides are cached by form, separately from line analyses.
   const GUIDE_VERSION = 1;
 
@@ -37,7 +37,7 @@
               items: {
                 type: 'object',
                 additionalProperties: false,
-                required: ['s', 'r', 'f', 'd', 'pos', 'm', 'p', 'c', 'role', 'n', 'g'],
+                required: ['s', 'r', 'f', 'x', 'b', 'd', 'pos', 'm', 'p', 'c', 'role', 'n', 'g'],
                 properties: {
                   s: { type: 'string', description: 'The word exactly as it appears in the line.' },
                   r: { type: 'string', description: 'Hiragana reading of a Japanese word containing kanji, or pinyin of a Chinese word; otherwise an empty string.' },
@@ -51,6 +51,34 @@
                       properties: {
                         t: { type: 'string', description: 'A piece of the word.' },
                         r: { type: 'string', description: 'Reading drawn above this piece, or an empty string.' },
+                      },
+                    },
+                  },
+                  x: {
+                    type: 'array',
+                    description: 'The same word, built from the same Chinese characters, in the other two of Japanese, Chinese and Korean.',
+                    items: {
+                      type: 'object',
+                      additionalProperties: false,
+                      required: ['lang', 'w', 'r', 'note'],
+                      properties: {
+                        lang: { type: 'string', enum: ['ja', 'zh', 'ko'] },
+                        w: { type: 'string', description: 'The word as written in that language.' },
+                        r: { type: 'string', description: 'Hiragana for Japanese, pinyin for Chinese, empty for Korean.' },
+                        note: { type: 'string', description: 'How its meaning or use differs, or an empty string if it is the same.' },
+                      },
+                    },
+                  },
+                  b: {
+                    type: 'array',
+                    description: 'For a word built up from several pieces: how the meaning builds, one piece at a time.',
+                    items: {
+                      type: 'object',
+                      additionalProperties: false,
+                      required: ['t', 'm'],
+                      properties: {
+                        t: { type: 'string', description: 'The form at this step.' },
+                        m: { type: 'string', description: 'What it means at this step, in a few words.' },
                       },
                     },
                   },
@@ -111,13 +139,16 @@ w: every word in order.
 For each word:
 
 s: the word copied exactly from the line, so it can be found in the text. Cover the whole line; skip only punctuation and symbols.
-p: the pieces of the word, in order, whose t values concatenate to exactly s. For each piece, g says what it means or what it does. Describe grammatical pieces by their function in plain words ("topic marker", "makes it causative", "past", "polite ending", "plural") instead of forcing a ${nativeLang} word onto them. Keep each g to a few words, since it is drawn above the piece. A word that does not decompose usefully gets a single piece: the whole word, with a gloss that says what it is.
+p: the pieces of the word, in order, whose t values concatenate to exactly s. For each piece, g says what it means or what it does, in at most four words, since it is drawn above the piece while the video plays. For a piece with a meaning of its own, give that meaning ("eat", "field", "school"). For a grammatical piece, give a short plain meaning and, where it helps, the name of the form in brackets, using the same label every time the same piece appears so the learner learns to recognise it: "make/let (causative)", "be done to (passive)", "can (potential)", "past", "not", "polite", "want to", "-ing (ongoing)", "topic marker", "object marker", "at/in", "plural". Never write a gloss that is awkward English. A word that does not decompose usefully gets a single piece: the whole word, with a gloss that says what it is.
+b: for a word made of a stem and two or more grammatical pieces (食べさせられた, 먹었어요 with several endings, a Chinese verb with a complement and 了), how the meaning builds, adding one piece at a time, starting from the dictionary form: 食べる "eat" → 食べさせる "make (someone) eat" → 食べさせられる "be made to eat" → 食べさせられた "was made to eat". Each step's t is the form at that step (an ordinary form a learner could look up or say) and m its meaning in a few words. Leave the list empty for every other word.
 m: what the word means here. Choose the sense that fits this sentence and this scene, not the first sense in a dictionary.
 r: the reading of the whole word: hiragana for a Japanese word containing kanji, pinyin with tone marks for a Chinese word. For every other word, including Japanese written only in kana and every language other than Japanese and Chinese, use an empty string. Never write romanization: no romaji, no Korean or other romanization.
 f: the word split into segments for ruby text drawn above the characters; the t values concatenate to exactly s.
   Japanese: each kanji is its own segment with its hiragana reading (食べる = 食/た + べる/""), and each run of kana is a segment with an empty reading. Keep kanji together in one segment only when the reading cannot be divided between them (今日 = 今日/きょう, 大人 = 大人/おとな). Katakana and kana-only words are one segment with an empty reading.
   Chinese: each character is its own segment with its pinyin with tone marks, in the tone it has in this word (一个 = 一/yí + 个/gè).
+  Korean: show the hanja behind Sino-Korean words, never romanization. Each Hangul syllable that comes from a Chinese character is its own segment with that character in its traditional form as used in Korea (학교에서 = 학/學 + 교/校 + 에서/""); native Korean syllables and endings are segments with an empty reading. A word with no Sino-Korean part gets an empty list.
   Every other language: an empty list.
+x: for a word built from Chinese characters (a kanji compound, a Chinese word, a Sino-Korean word), the same word in the other two of Japanese, Chinese and Korean when it exists there with the same characters and a related meaning, written the way that language writes it (Japanese 学校 がっこう, Chinese 学校 xuéxiào, Korean 학교 with the hanja 學校 noted in note). In note say how the meaning or use differs, or leave it empty when it is the same. Leave the list empty for every other word, and never invent a cognate that is not in real use.
 d: the dictionary form.
 pos: part of speech and the form it is in.
 c and role: group the words into phrases. Words in the same phrase share a phrase number c, counted from 0 in order, and share the role that phrase plays in the sentence. A noun and the particle or case ending that marks it belong to one phrase.
@@ -357,5 +388,61 @@ In the line: ${req.sentence || ''}`;
 List the words in the dictionary form, counting every inflected form of a word as the same word. Leave out particles, grammatical endings, interjections, sound effects and people's names; keep place names and other proper nouns only when they need explaining. Order the list by how many lines use the word, most first, and include up to 150 words. For each: d the dictionary form, r its reading (hiragana for Japanese words with kanji, pinyin with tone marks for Chinese, an empty string otherwise; never romanization), m the meaning it has in this episode, pos its part of speech, count the number of lines that use it, line the number of the line that shows it most clearly.`;
   }
 
-  SG.prompt = { wordGuideSystemPrompt, wordGuideUserMessage, WORDS_VERSION, WORDS_SCHEMA, wordsSystemPrompt, PROMPT_VERSION, GUIDE_VERSION, CHAR_VERSION, CHAR_SCHEMA, charSystemPrompt, charUserMessage, guideSystemPrompt, guideUserMessage, ROLES, ANALYSIS_SCHEMA, systemPrompt, userMessage, deepSystemPrompt, deepUserMessage };
+  // ---- questions about a line ------------------------------------------------
+
+  function askSystemPrompt(nativeLang) {
+    return `You are a language tutor sitting next to a learner while they watch a show. They paused on a line and are asking you about it. They read ${nativeLang}; answer in ${nativeLang}, quoting the language being learned with a reading in brackets where they might not know it (hiragana for Japanese, pinyin with tone marks for Chinese; never romanization).
+
+Answer the question they actually asked, directly, then give the reasoning a good teacher would: the rule behind it, where it applies and where it does not, and a short contrasting example when that makes the difference clear. Use the scene, the surrounding lines and the analysis you are given. If the honest answer is that usage varies or that both options are fine, say so. Keep it conversational and fairly short (under about 200 words unless they ask for more), in plain text without markdown headings.`;
+  }
+
+  // req: { sentence, translation, before: [], after: [], show, words: 'word = meaning; ...', history: [{q, a}], question }
+  function askMessages(req) {
+    let ctx = `The line: ${req.sentence}\n`;
+    if (req.translation) ctx += `Translation: ${req.translation}\n`;
+    if (req.words) ctx += `Words in it: ${req.words}\n`;
+    if (req.before && req.before.length) ctx += `Lines just before: ${req.before.join(' / ')}\n`;
+    if (req.after && req.after.length) ctx += `Lines just after: ${req.after.join(' / ')}\n`;
+    if (req.show) ctx += `Show: ${req.show}\n`;
+    const msgs = [];
+    const history = req.history || [];
+    history.forEach((turn, i) => {
+      msgs.push({ role: 'user', content: (i === 0 ? ctx + '\n' : '') + turn.q });
+      msgs.push({ role: 'assistant', content: turn.a });
+    });
+    msgs.push({ role: 'user', content: (history.length ? '' : ctx + '\n') + req.question });
+    return msgs;
+  }
+
+  // ---- grammar review questions ---------------------------------------------
+
+  const CLOZE_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['sentence', 'answer', 'translation', 'hint', 'why', 'contrast'],
+    properties: {
+      sentence: { type: 'string', description: 'A natural sentence with the tested part replaced by ＿＿.' },
+      answer: { type: 'string', description: 'What goes in the blank, exactly as written in the full sentence.' },
+      translation: { type: 'string', description: 'Translation of the full sentence.' },
+      hint: { type: 'string', description: 'A short hint shown with the question, such as the dictionary form to use and the meaning wanted.' },
+      why: { type: 'string', description: 'Why this answer is right and the tempting alternative is wrong, in one to three sentences.' },
+      contrast: { type: 'boolean', description: 'True when the answer is a different form that is often confused with the one being studied.' },
+    },
+  };
+
+  function clozeSystemPrompt(nativeLang) {
+    return `You write one review question for a learner studying a grammar form. They read ${nativeLang}; write the translation, hint and explanation in ${nativeLang}, and never use romanization.
+
+Write one natural, everyday sentence in the target language with the part that shows the form replaced by ＿＿, as a fill-in-the-blank question. About one time in three, write instead a sentence where a form often confused with the studied one is the right answer (and set contrast to true), so the learner practises where the form does not fit as well as where it does. The hint must make the intended meaning clear without giving the answer away: give the dictionary form of the word to put in the blank and what the sentence should mean. Use vocabulary a learner at this level probably knows, and vary the situation every time.`;
+  }
+
+  function clozeUserMessage(req) {
+    let msg = `Grammar form: ${req.name || req.k}\nIdentifier: ${req.k}\nLanguage: ${req.lang}\n`;
+    if (req.example) msg += `Where the learner first met it: ${req.example}\n`;
+    if (req.guide) msg += `\nThe guide the learner read about it:\n${req.guide.slice(0, 6000)}\n`;
+    if (req.avoid && req.avoid.length) msg += `\nDo not reuse these sentences: ${req.avoid.join(' / ')}\n`;
+    return msg;
+  }
+
+  SG.prompt = { askSystemPrompt, askMessages, CLOZE_SCHEMA, clozeSystemPrompt, clozeUserMessage, wordGuideSystemPrompt, wordGuideUserMessage, WORDS_VERSION, WORDS_SCHEMA, wordsSystemPrompt, PROMPT_VERSION, GUIDE_VERSION, CHAR_VERSION, CHAR_SCHEMA, charSystemPrompt, charUserMessage, guideSystemPrompt, guideUserMessage, ROLES, ANALYSIS_SCHEMA, systemPrompt, userMessage, deepSystemPrompt, deepUserMessage };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

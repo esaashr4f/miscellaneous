@@ -20,6 +20,11 @@ test('segmentsFor prefers a valid per-kanji split from Claude', () => {
   assert.deepEqual(R.segmentsFor(bad, 'ja'), [{ t: '食', r: 'た' }, { t: 'べた', r: '' }]);
   assert.equal(R.segmentsFor({ s: 'ありがとう', r: '' }, 'ja'), null);
   assert.equal(R.segmentsFor({ s: '학교에서', r: '' }, 'ko'), null); // no romanization
+  const ko = { s: '학교에서', r: '', f: [{ t: '학', r: '學' }, { t: '교', r: '校' }, { t: '에서', r: '' }] };
+  assert.deepEqual(R.segmentsFor(ko, 'ko'), ko.f);
+  assert.equal(R.showReading(ko.f[0], null), true);
+  assert.equal(R.showReading(ko.f[2], null), false);
+  assert.deepEqual(['mā', 'má', 'mǎ', 'mà', 'ma', 'le5'].map(R.toneOf), [1, 2, 3, 4, 5, 5]);
   assert.deepEqual(R.segmentsFor({ s: '火车', r: 'huǒ chē' }, 'zh'), [{ t: '火', r: 'huǒ' }, { t: '车', r: 'chē' }]);
 });
 

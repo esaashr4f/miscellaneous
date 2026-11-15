@@ -89,7 +89,9 @@ test('analyzeLines sends the expected request and parses the reply', async (t) =
   assert.match(b.messages[0].content, /- 前の行/);
   assert.ok(!('thinking' in b) && !('temperature' in b));
 
+  await new Promise((r) => setTimeout(r, 30)); // usage is recorded in the background
   const usage = store.usage['claude-opus-5-5'];
+  assert.ok(store.spend[Object.keys(store.spend)[0]] > 0);
   assert.equal(usage.requests, 1);
   assert.equal(usage.output, 50);
 
@@ -160,6 +162,33 @@ test('explainWordGuide asks where the word fits and where it does not', async (t
   assert.match(body.system, /Never use romanization/);
   assert.match(body.messages[0].content, /Dictionary form: 母/);
   assert.equal(body.output_config.effort, 'medium');
+});
+
+test('batch requests drop the beta header and fallbacks; the cap stops requests', async () => {
+  const settings = Object.assign({}, SG.DEFAULTS, { apiKey: 'sk-test', model: 'claude-opus-5-5' });
+  const p = SG.claude.batchAnalysisParams(settings, ['a'], [], 'ja');
+  assert.ok(!('betas' in p) && !('fallbacks' in p));
+  assert.equal(p.output_config.format.type, 'json_schema');
+  assert.equal(p.model, 'claude-opus-5-5');
+  store.spend = { [SG.claude.monthKey()]: 12.5 };
+  await assert.rejects(
+    SG.claude.analyzeLines(Object.assign({}, settings, { monthlyCap: 10 }), ['x'], [], 'ja'),
+    (e) => e.code === 'cap' && /cap/.test(e.message),
+  );
+  store.spend = {};
+});
+
+test('line questions carry the line and the conversation so far', () => {
+  const msgs = SG.prompt.askMessages({
+    sentence: '母に野菜を食べさせられた。', translation: 'My mom made me eat vegetables.', words: '母 = my mother',
+    before: ['前'], after: ['後'], history: [{ q: 'Why に?', a: 'It marks who made you.' }], question: 'Could I use から?',
+  });
+  assert.equal(msgs.length, 3);
+  assert.match(msgs[0].content, /The line: 母に野菜を食べさせられた。/);
+  assert.match(msgs[0].content, /Why に\?$/);
+  assert.equal(msgs[1].role, 'assistant');
+  assert.equal(msgs[2].content, 'Could I use から?');
+  assert.match(SG.prompt.clozeUserMessage({ k: 'ja.causative_passive', name: 'させられる', lang: 'ja', avoid: ['x'] }), /Do not reuse/);
 });
 
 test('schema contains only features structured outputs accept', () => {

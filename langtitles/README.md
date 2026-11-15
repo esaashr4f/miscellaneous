@@ -20,6 +20,18 @@ Japanese gets hiragana over each kanji, and Chinese gets pinyin over each charac
 ![A kanji entry](docs/character.png)
 ![The word bank](docs/word-bank.png)
 
+## Korean, Chinese and Japanese together
+
+- **Hanja over Korean.** Sino-Korean words show their hanja over each syllable (학교 with 學校 above), like furigana. No romanization.
+- **The same word in your other languages.** The hover popup lists the same word in the other two of Japanese, Chinese and Korean (학교 → 学校 がっこう, 学校 xuéxiào), with any difference in meaning (野菜 is "vegetables" in Japanese but "wild herbs" in Chinese).
+- **Tone colours.** Pinyin is coloured by tone: 1 red, 2 green, 3 blue, 4 purple, neutral grey.
+- **Pitch accent.** Japanese words show their pitch pattern in the hover popup, word lists and review, drawn as a line over the kana with the accent number (はし [1] chopsticks, はし [2] bridge). Data: [Kanjium](https://github.com/mifunetoshiro/kanjium) (CC BY-SA 4.0), downloaded once.
+- **How a word builds up.** For an inflected word, the hover popup shows the chain: 食べる eat → 食べさせる make (someone) eat → 食べさせられる be made to eat → 食べさせられた was made to eat. Grammar pieces carry short, consistent labels ("make/let (causative)", "be done to (passive)", "past") so you learn to recognise them.
+
+## Ask about a line
+
+Under each line in the side panel, ask anything ("why は and not が here?", "could I say this to my boss?"). Claude answers with the line, the lines around it and the scene in mind, and you can ask follow-up questions.
+
 ## Studying while you watch
 
 - **New words underlined.** Mark words you know with **Known?** in the hover popup, with **Mark every word known** for a line in the side panel, or by learning them in review. Once 20 words are known in a language, words you don't know yet get a wavy underline.
@@ -32,9 +44,15 @@ Japanese gets hiragana over each kanji, and Chinese gets pinyin over each charac
 
 ## Review
 
-**Review** (toolbar button, word bank, or the panel's Word bank) turns saved words and characters into flashcards with spaced repetition: Again, Hard, Good or Easy schedule the next review (Space shows the answer, keys 1 to 4 grade it). Word cards show the word in the line you met it; the answer adds furigana, meaning, pieces, the translation and audio. Character cards add stroke order. New cards per day can be set in Options. Words and characters you've learned (reviewed every 21 days or longer) count as known automatically, so their furigana and underline go away; this can be turned off.
+**Review** (toolbar button, word bank, or the panel's Word bank) turns saved words, characters, whole lines (☆ Save line in the side panel) and grammar forms into flashcards with spaced repetition: Again, Hard, Good or Easy schedule the next review (Space shows the answer, keys 1 to 4 grade it). Word cards show the word in the line you met it; the answer adds furigana, meaning, pieces, the translation and audio. Character cards add stroke order. Line cards show the line, then its translation and word-by-word breakdown. Grammar cards are a new fill-in-the-blank sentence each time, written by Claude, and about one time in three the right answer is a form often confused with the one you are studying, so you practise where it does not fit as well as where it does. Grammar forms are added automatically when you open their guide (this can be turned off). New cards per day can be set in Options. Words and characters you've learned (reviewed every 21 days or longer) count as known automatically, so their furigana and underline go away; this can be turned off.
 
 ![Review](docs/review.png)
+
+## Progress
+
+The **Progress** page (toolbar button) shows words and characters you know, your streak, minutes watched and cards reviewed, with charts for the last 30 days and how many words you know in each language over time.
+
+Before or while watching, **Episode words** also tells you what share of the episode's words you already know, which helps you choose shows at the right level.
 
 ## Stroke order and components
 
@@ -123,6 +141,15 @@ donkey.to and similar sites play the video in an embedded player from another do
 
 Each line is analyzed once and saved. Grammar guides are longer (roughly 500 to 900 words) and written at medium effort or above, but only once per form. The default model is Claude Opus 5.5 with low thinking effort. Claude Haiku 5.5 is far cheaper, with simpler explanations. Claude Fable 5.2 is the most capable and the most expensive. The options page shows token usage and an estimated spend for each model. "Prepare ahead" (10 minutes by default) controls how far ahead Langtitles analyzes, so skipping through a video doesn't pay for lines you never watch.
 
+## Phones and tablets
+
+Langtitles works in Firefox for Android. With no hover on touch screens, tap a word to open it (the video pauses) and tap × to close it and carry on. The panel fills the screen on narrow displays.
+
+## Saving money
+
+- **Prepare a whole season at half price:** side panel → Find subtitles → Prepare a whole season. Langtitles downloads subtitles for each episode and sends every line through Anthropic's batch API, which costs half as much and is usually done within an hour (at most a day). Those episodes then play with every line ready. Each episode uses one subtitle download.
+- **Spending cap:** set a monthly limit in Options. Once this month's estimated spend reaches it, Langtitles stops sending requests until you raise it. The toolbar popup shows this month's spend.
+
 ## Privacy
 
 The API key is stored in this Firefox profile and used only by the extension's background page; pages and players never see it. Subtitle text, and the word you hover, are sent to the Anthropic API. Nothing else leaves your browser.
@@ -167,4 +194,6 @@ npm run package
 | `extension/shared/srs.js` | Review scheduling |
 | `extension/shared/strokes.js` | Stroke order parsing and drawing |
 | `extension/shared/speech.js` | Pronunciation with the system's voices |
+| `extension/shared/pitch.js` | Japanese pitch accent patterns and Kanjium lookup |
+| `extension/progress/` | The progress page |
 | `extension/shared/ruby.js` | Furigana and pinyin placement, known characters, Anki formatting |

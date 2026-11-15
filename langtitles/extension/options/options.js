@@ -4,7 +4,7 @@
   const $ = (id) => document.getElementById(id);
   let settings = await SG.loadSettings();
 
-  const CHECKS = ['highlightNew', 'pauseOnePlus', 'slowReplay', 'autoKnownFromReview', 'autoFind', 'enabled', 'showMeaning', 'showParts', 'furigana', 'pinyin', 'hideKnownPinyin', 'showRoles', 'showTranslation', 'hideNative', 'hoverPause', 'resumeOnLeave', 'autoDeep'];
+  const CHECKS = ['toneColors', 'hanja', 'pitchAccent', 'addGrammarToReview', 'highlightNew', 'pauseOnePlus', 'slowReplay', 'autoKnownFromReview', 'autoFind', 'enabled', 'showMeaning', 'showParts', 'furigana', 'pinyin', 'hideKnownPinyin', 'showRoles', 'showTranslation', 'hideNative', 'hoverPause', 'resumeOnLeave', 'autoDeep'];
   const TEXTS = ['apiKey', 'baseURL', 'nativeLang', 'osApiKey', 'osUser', 'osPass', 'subdlKey', 'jimakuKey'];
 
   const modelSel = $('model');
@@ -22,6 +22,7 @@
     $('chunkSize').value = settings.chunkSize;
     $('slowRate').value = String(settings.slowRate);
     $('newPerDay').value = settings.newPerDay;
+    $('monthlyCap').value = settings.monthlyCap || 0;
     $('concurrency').value = settings.concurrency;
     const m = SG.MODELS.find((x) => x.id === settings.model);
     $('modelNote').textContent = m ? `${m.note} $${m.inPrice} / $${m.outPrice} per million input / output tokens.` : '';
@@ -55,6 +56,10 @@
     return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt;
   };
   $('slowRate').addEventListener('change', (e) => save({ slowRate: Number(e.target.value) }));
+  $('monthlyCap').addEventListener('change', (e) => save({ monthlyCap: Math.max(0, Number(e.target.value) || 0) }));
+  browser.runtime.sendMessage({ type: 'spend' }).then((r) => {
+    if (r) $('spentNow').textContent = `About $${r.spent.toFixed(2)} spent so far this month.`;
+  });
   $('newPerDay').addEventListener('change', (e) => save({ newPerDay: clampInt(e.target.value, 0, 200, 20) }));
   $('chunkSize').addEventListener('change', (e) => save({ chunkSize: clampInt(e.target.value, 2, 25, 8) }));
   $('concurrency').addEventListener('change', (e) => save({ concurrency: clampInt(e.target.value, 1, 8, 3) }));

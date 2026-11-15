@@ -136,6 +136,9 @@
         text, sentence: req.sentence || '', word: req.word || '', model: settings.model, savedAt: Date.now(),
       };
       cache.putMany('guides', [[key, entry]]).catch(() => {});
+      if (req.kind !== 'wordguide' && settings.addGrammarToReview) {
+        bankSave({ kind: 'grammar', lang: req.lang || '', text: req.form.k, name: req.form.name || req.form.k, context: req.sentence ? { sentence: req.sentence, savedAt: Date.now() } : null }).catch(() => {});
+      }
       each((w) => w.port.postMessage({ type: 'deepDone', reqId: w.reqId, text }));
     } catch (err) {
       each((w) => w.port.postMessage({ type: 'deepError', reqId: w.reqId, message: err.message }));
@@ -226,6 +229,216 @@
     cache.putMany('deep', [[key, words]]).catch(() => {});
     return words;
   }
+
+  // ---- pitch accent (Kanjium, CC BY-SA 4.0) -------------------------------------
+
+  const KANJIUM_URL = 'https://cdn.jsdelivr.net/gh/mifunetoshiro/kanjium@master/data/source_files/raw/accents.txt';
+  let pitchMap = null;
+  let pitchLoading = null;
+
+  function loadPitch() {
+    if (pitchMap) return Promise.resolve(pitchMap);
+    if (!pitchLoading) {
+      pitchLoading = (async () => {
+        const key = 'kanjium-accents';
+        let hit = (await cache.getMany('strokes', [key])).get(key);
+        if (!hit) {
+          const res = await fetch(KANJIUM_URL);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          hit = { kind: 'kanjium', text: await res.text() };
+          cache.putMany('strokes', [[key, hit]]).catch(() => {});
+        }
+        pitchMap = SG.pitch.parseKanjium(hit.text);
+        return pitchMap;
+      })().catch((e) => {
+        pitchLoading = null;
+        throw e;
+      });
+    }
+    return pitchLoading;
+  }
+
+  // items: [{ d, r, s }] -> [{ r, a } | null]
+  async function pitchFor(items) {
+    let map;
+    try {
+      map = await loadPitch();
+    } catch (e) {
+      return items.map(() => null);
+    }
+    return items.map((it) => {
+      // The surface reading only fits the dictionary form when the word is not inflected.
+      const reading = it.s && it.d && it.s !== it.d ? '' : it.r;
+      return SG.pitch.lookup(map, it.d || it.s, reading) || (it.s && it.s !== it.d ? SG.pitch.lookup(map, it.s, it.r) : null);
+    });
+  }
+
+  // ---- history for the progress page ---------------------------------------------
+
+  function dayKey(now) {
+    return SG.srs.dayKey(now || Date.now());
+  }
+
+  async function updateDay(fn) {
+    const r = (await browser.storage.local.get('history')).history || {};
+    const k = dayKey();
+    r[k] = r[k] || {};
+    fn(r[k]);
+    await browser.storage.local.set({ history: r });
+  }
+
+  let snapTimer = null;
+  function snapshotKnown() {
+    clearTimeout(snapTimer);
+    snapTimer = setTimeout(async () => {
+      const r = await browser.storage.local.get(['knownWords', 'known']);
+      const words = {};
+      for (const [lang, list] of Object.entries(r.knownWords || {})) words[lang] = (list || []).length;
+      const chars = {};
+      for (const [lang, str] of Object.entries(r.known || {})) chars[lang] = Array.from(str || '').length;
+      updateDay((d) => {
+        d.knownWords = words;
+        d.knownChars = chars;
+      });
+    }, 1500);
+  }
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && (changes.knownWords || changes.known)) snapshotKnown();
+  });
+  snapshotKnown();
+
+  // ---- season prep through the batch API -----------------------------------------
+
+  async function getJobs() {
+    return (await browser.storage.local.get('seasonJobs')).seasonJobs || [];
+  }
+
+  async function saveJob(job) {
+    const jobs = await getJobs();
+    const i = jobs.findIndex((j) => j.id === job.id);
+    if (i >= 0) jobs[i] = job;
+    else jobs.unshift(job);
+    await browser.storage.local.set({ seasonJobs: jobs.slice(0, 10) });
+  }
+
+  // Downloads subtitles for each episode, then sends every line to the batch API at half price.
+  // The results land in the same cache as normal analyses, so those episodes play with lines ready.
+  async function startSeason(req) {
+    await ready;
+    const base = req.episode;
+    const job = {
+      id: 'job' + Date.now(),
+      show: SG.episode.describe(Object.assign({}, base, { episode: null })) + ` · season ${req.season}`,
+      season: req.season, from: req.from, to: req.to, model: settings.model,
+      status: 'downloading', created: Date.now(), episodes: [], lines: 0, requests: 0,
+    };
+    await saveJob(job);
+    const fp = fingerprint();
+    const requests = [];
+    const counts = {};
+    const chunks = {};
+    const size = Math.max(2, settings.chunkSize || 8);
+    for (let n = req.from; n <= req.to; n++) {
+      const ep = Object.assign({}, base, { season: req.season, episode: n });
+      const entry = { n, status: 'searching' };
+      job.episodes.push(entry);
+      await saveJob(job);
+      try {
+        const got = await autoSubtitle(ep, req.langs);
+        if (!got.track) {
+          entry.status = 'no subtitles found';
+          continue;
+        }
+        const cues = got.track.cues;
+        const texts = cues.map((c) => c.text);
+        const keys = texts.map((t, i) => SG.subtitles.lineKey(t, i ? texts[i - 1] : ''));
+        const cached = await cache.getMany('lines', keys.map((k) => fp + '|' + k));
+        const langHint = SG.lang.detectLang(texts.slice(0, 60).join('\n'));
+        let added = 0;
+        for (let i = 0; i < texts.length; i += size) {
+          const idx = [];
+          for (let j = i; j < Math.min(texts.length, i + size); j++) if (!cached.has(fp + '|' + keys[j])) idx.push(j);
+          if (!idx.length) continue;
+          const id = `e${n}c${i}`;
+          const lines = idx.map((j) => texts[j]);
+          const context = texts.slice(Math.max(0, idx[0] - 3), idx[0]);
+          requests.push({ custom_id: id, params: claude.batchAnalysisParams(settings, lines, context, langHint) });
+          counts[id] = lines.length;
+          chunks[id] = idx.map((j) => keys[j]);
+          added += lines.length;
+        }
+        entry.status = 'subtitles ready';
+        entry.lines = added;
+        job.lines += added;
+      } catch (e) {
+        entry.status = e.message || 'failed';
+      }
+      await saveJob(job);
+    }
+    if (!requests.length) {
+      job.status = job.lines ? 'done' : 'nothing to prepare';
+      await saveJob(job);
+      return job;
+    }
+    try {
+      const batch = await claude.batchCreate(settings, requests);
+      job.batchId = batch.id;
+      job.requests = requests.length;
+      job.status = 'processing';
+      job.fingerprint = fp;
+      job.counts = counts;
+      job.chunks = chunks;
+    } catch (e) {
+      job.status = 'failed: ' + e.message;
+    }
+    await saveJob(job);
+    return job;
+  }
+
+  let polling = false;
+  async function pollJobs() {
+    if (polling) return;
+    polling = true;
+    try {
+      await ready;
+      for (const job of await getJobs()) {
+        if (job.status !== 'processing' || !job.batchId) continue;
+        let batch;
+        try {
+          batch = await claude.batchRetrieve(settings, job.batchId);
+        } catch (e) {
+          continue;
+        }
+        job.progress = batch.request_counts;
+        if (batch.processing_status !== 'ended') {
+          await saveJob(job);
+          continue;
+        }
+        let ok = 0;
+        const store = [];
+        await claude.batchResults(settings, job.batchId, job.counts || {}, (id, analyses) => {
+          const keys = (job.chunks || {})[id];
+          if (!analyses || !keys) return;
+          analyses.forEach((a, i) => {
+            if (a && keys[i]) {
+              store.push([job.fingerprint + '|' + keys[i], a]);
+              ok++;
+            }
+          });
+        });
+        await cache.putMany('lines', store);
+        job.status = 'done';
+        job.ready = ok;
+        delete job.chunks;
+        delete job.counts;
+        await saveJob(job);
+      }
+    } finally {
+      polling = false;
+    }
+  }
+  setInterval(pollJobs, 120000);
+  setTimeout(pollJobs, 15000);
 
   function bankKey(kind, lang, text) {
     return [kind, lang, text].join('|');
@@ -322,6 +535,10 @@
     return { track: null, errors, searched: found.providers.length };
   }
 
+  function publicJob(j) {
+    return { id: j.id, show: j.show, status: j.status, from: j.from, to: j.to, lines: j.lines, ready: j.ready, progress: j.progress, episodes: j.episodes, created: j.created };
+  }
+
   function seekFor(tabId) {
     const s = pendingSeeks.get(tabId);
     if (!s || s.until < Date.now()) return null;
@@ -393,6 +610,26 @@
         cache.remove('bank', msg.key).then(() => send(port, { type: 'bankSaved', reqId: msg.reqId, removed: true }));
       } else if (msg.type === 'bankStatus') {
         bankStatus(msg.keys).then((status) => send(port, { type: 'bankStatus', reqId: msg.reqId, status }));
+      } else if (msg.type === 'pitch') {
+        pitchFor(msg.items || []).then((results) => send(port, { type: 'pitch', reqId: msg.reqId, results }));
+      } else if (msg.type === 'ask') {
+        ready.then(() => claude.askLine(settings, msg, (delta) => send(port, { type: 'askDelta', reqId: msg.reqId, delta })))
+          .then(
+            (text) => send(port, { type: 'askDone', reqId: msg.reqId, text }),
+            (err) => send(port, { type: 'askError', reqId: msg.reqId, message: err.message }),
+          );
+      } else if (msg.type === 'watched') {
+        updateDay((d) => {
+          d.minutes = d.minutes || {};
+          d.minutes[msg.lang || 'und'] = (d.minutes[msg.lang || 'und'] || 0) + (Number(msg.minutes) || 0);
+        });
+      } else if (msg.type === 'seasonStart') {
+        startSeason(msg).then(
+          (job) => send(port, { type: 'seasonStarted', reqId: msg.reqId, job: { id: job.id, status: job.status } }),
+          (err) => send(port, { type: 'seasonStarted', reqId: msg.reqId, error: err.message }),
+        );
+      } else if (msg.type === 'seasonJobs') {
+        getJobs().then((jobs) => send(port, { type: 'seasonJobs', reqId: msg.reqId, jobs: jobs.map(publicJob) }));
       } else if (msg.type === 'stroke') {
         strokeData(msg.ch, msg.lang).then((data) => send(port, { type: 'stroke', reqId: msg.reqId, data }));
       } else if (msg.type === 'episodeWords') {
@@ -481,6 +718,25 @@
     if (msg.type === 'bankRemove' && msg.key) return cache.remove('bank', msg.key).then(() => ({ ok: true }));
     if (msg.type === 'bankPut' && Array.isArray(msg.items)) {
       return cache.putMany('bank', msg.items.filter((x) => x && x.key).map((x) => [x.key, x])).then(() => ({ ok: true, count: msg.items.length }));
+    }
+    if (msg.type === 'pitch') return pitchFor(msg.items || []).then((results) => ({ results }));
+    if (msg.type === 'reviewed') {
+      return updateDay((d) => {
+        d.reviews = (d.reviews || 0) + 1;
+      }).then(() => ({ ok: true }));
+    }
+    if (msg.type === 'seasonJobs') return getJobs().then((jobs) => ({ jobs: jobs.map(publicJob) }));
+    if (msg.type === 'spend') return claude.spentThisMonth().then((spent) => ({ spent }));
+    if (msg.type === 'grammarCloze' && msg.k) {
+      return ready.then(async () => {
+        const g = (await cache.getMany('guides', [guideKey(msg.k)])).get(guideKey(msg.k));
+        try {
+          const q = await claude.grammarCloze(settings, Object.assign({}, msg, { guide: g ? g.text : '' }));
+          return { q };
+        } catch (err) {
+          return { error: err.message };
+        }
+      });
     }
     if (msg.type === 'stroke' && msg.ch) return strokeData(msg.ch, msg.lang).then((data) => ({ data }));
     if (msg.type === 'charInfo' && msg.ch) return charInfo(msg).then((entry) => ({ entry }), (err) => ({ error: err.message }));
