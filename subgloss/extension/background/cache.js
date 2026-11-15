@@ -4,14 +4,14 @@
   const SG = (root.SG = root.SG || {});
 
   const DB_NAME = 'subgloss';
-  const STORES = ['lines', 'deep', 'guides'];
-  const memory = { lines: new Map(), deep: new Map(), guides: new Map() };
+  const STORES = ['lines', 'deep', 'guides', 'subs', 'picks'];
+  const memory = { lines: new Map(), deep: new Map(), guides: new Map(), subs: new Map(), picks: new Map() };
   let dbPromise = null;
 
   function open() {
     if (!dbPromise) {
       dbPromise = new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 2);
+        const req = indexedDB.open(DB_NAME, 3);
         req.onupgradeneeded = () => {
           for (const name of STORES) {
             if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name);
@@ -93,9 +93,9 @@
     });
   }
 
-  // Line analyses and word explanations only; saved grammar guides are kept.
+  // Line analyses, word explanations and downloaded subtitles; saved grammar guides are kept.
   async function clear() {
-    const stores = ['lines', 'deep'];
+    const stores = ['lines', 'deep', 'subs', 'picks'];
     for (const name of stores) memory[name].clear();
     const db = await open();
     if (!db) return;

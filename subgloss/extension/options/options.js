@@ -4,8 +4,8 @@
   const $ = (id) => document.getElementById(id);
   let settings = await SG.loadSettings();
 
-  const CHECKS = ['enabled', 'showMeaning', 'showParts', 'showReading', 'showRoles', 'showTranslation', 'hideNative', 'hoverPause', 'resumeOnLeave', 'autoDeep'];
-  const TEXTS = ['apiKey', 'baseURL', 'nativeLang'];
+  const CHECKS = ['autoFind', 'enabled', 'showMeaning', 'showParts', 'showReading', 'showRoles', 'showTranslation', 'hideNative', 'hoverPause', 'resumeOnLeave', 'autoDeep'];
+  const TEXTS = ['apiKey', 'baseURL', 'nativeLang', 'osApiKey', 'osUser', 'osPass', 'subdlKey', 'jimakuKey'];
 
   const modelSel = $('model');
   for (const m of SG.MODELS) modelSel.append(new Option(m.name, m.id));

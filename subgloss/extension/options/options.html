@@ -60,6 +60,35 @@
     </section>
 
     <section>
+      <h2>Subtitle sites</h2>
+      <p class="hint">When a site has no subtitles in the language you are learning, SubGloss can fetch them from subtitle sites for the episode you are watching. Each site needs a free account. Set up any of them; SubGloss searches all that are set up.</p>
+      <label class="check"><input id="autoFind" type="checkbox"> Load subtitles automatically when the site has none in my languages</label>
+      <h3>OpenSubtitles</h3>
+      <label class="field">
+        <span>API key</span>
+        <input id="osApiKey" type="password" autocomplete="off" spellcheck="false">
+        <small>The largest library, all languages. Sign up at opensubtitles.com, then under your profile open <a href="https://www.opensubtitles.com/consumers" target="_blank" rel="noopener">API consumers</a>, create one and copy its key.</small>
+      </label>
+      <div class="pair">
+        <label class="field"><span>Username</span><input id="osUser" type="text" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>Password</span><input id="osPass" type="password" autocomplete="off"></label>
+      </div>
+      <small class="block">Optional. Signed in you get 20 downloads a day instead of 5. SubGloss saves each file it downloads, so rewatching does not use up downloads.</small>
+      <h3>SubDL</h3>
+      <label class="field">
+        <span>API key</span>
+        <input id="subdlKey" type="password" autocomplete="off" spellcheck="false">
+        <small>Good for Korean, Chinese and season packs. Sign up at subdl.com and copy the key from <a href="https://subdl.com/panel/api" target="_blank" rel="noopener">your API panel</a>.</small>
+      </label>
+      <h3>Jimaku</h3>
+      <label class="field">
+        <span>API key</span>
+        <input id="jimakuKey" type="password" autocomplete="off" spellcheck="false">
+        <small>Japanese subtitles for anime, often taken from the original broadcast. Sign up at jimaku.cc and create a key on <a href="https://jimaku.cc/account" target="_blank" rel="noopener">your account page</a>.</small>
+      </label>
+    </section>
+
+    <section>
       <h2>Display</h2>
       <label class="check"><input id="showMeaning" type="checkbox"> Meaning of each word above it</label>
       <label class="check"><input id="showParts" type="checkbox"> Word pieces with their glosses (x + y + z)</label>
@@ -118,7 +147,7 @@
       <div id="usage" class="usage"></div>
       <div class="row">
         <button id="resetUsage" type="button">Reset usage counter</button>
-        <button id="clearCache" type="button">Clear saved breakdowns</button>
+        <button id="clearCache" type="button">Clear saved breakdowns and subtitles</button>
         <a href="../grammar/grammar.html" target="_blank">Grammar library</a>
         <span id="cacheResult" class="note"></span>
       </div>

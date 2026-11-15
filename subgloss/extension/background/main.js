@@ -167,6 +167,82 @@
     }
   }
 
+  // ---- subtitle sources ----------------------------------------------------
+
+  const SUB_TTL = 90 * 24 * 3600 * 1000;
+
+  function subKey(result) {
+    return result.provider + '|' + result.id;
+  }
+
+  function trackFrom(result, sub) {
+    const source = SG.providers.PROVIDERS[result.provider].name;
+    return {
+      id: 'remote:' + subKey(result),
+      label: `${source} · ${result.name || sub.file || ''}`.slice(0, 90),
+      lang: result.lang,
+      source: 'remote',
+      provider: result.provider,
+      cues: sub.cues,
+    };
+  }
+
+  // Downloads (or reuses) one result and remembers it as the choice for this episode.
+  async function loadSubtitle(result, ep) {
+    const key = subKey(result);
+    const cached = (await cache.getMany('subs', [key])).get(key);
+    let sub = cached && Date.now() - cached.savedAt < SUB_TTL ? cached : null;
+    let note = '';
+    if (!sub) {
+      const got = await SG.providers.download(settings, result, ep);
+      sub = { cues: got.cues, file: got.file, savedAt: Date.now() };
+      note = got.note;
+      cache.putMany('subs', [[key, sub]]).catch(() => {});
+    }
+    if (ep) {
+      const pick = { result, savedAt: Date.now() };
+      cache.putMany('picks', [[SG.episode.key(ep, result.lang), pick]]).catch(() => {});
+    }
+    return { track: trackFrom(result, sub), note };
+  }
+
+  // Automatic loading: a file chosen before for this episode, otherwise the best search result.
+  async function autoSubtitle(ep, langs) {
+    for (const lang of langs) {
+      const pick = (await cache.getMany('picks', [SG.episode.key(ep, lang)])).get(SG.episode.key(ep, lang));
+      if (pick) {
+        try {
+          const loaded = await loadSubtitle(pick.result, ep);
+          return Object.assign(loaded, { reused: true, offset: pick.offset, alternatives: null });
+        } catch (e) {
+          /* fall through to a fresh search */
+        }
+      }
+    }
+    const found = await SG.providers.search(settings, ep, langs);
+    const errors = Object.entries(found.report).filter(([, r]) => !r.ok).map(([, r]) => r.message);
+    // Only take a result that is clearly this episode (or this movie).
+    const usable = found.results.filter((r) => !r.pack && (ep.type !== 'tv' || r.episode == null || Number(r.episode) === Number(ep.episode)));
+    for (const result of usable.slice(0, 3)) {
+      try {
+        const loaded = await loadSubtitle(result, ep);
+        return Object.assign(loaded, { reused: false, alternatives: found.results.length - 1 });
+      } catch (e) {
+        errors.push(e.message);
+      }
+    }
+    return { track: null, errors, searched: found.providers.length };
+  }
+
+  async function tabInfo(tabId) {
+    try {
+      const tab = await browser.tabs.get(tabId);
+      return { url: tab.url || '', title: tab.title || '' };
+    } catch (e) {
+      return { url: '', title: '' };
+    }
+  }
+
   // ---- content script connections ----------------------------------------
 
   function send(port, msg) {
@@ -190,7 +266,10 @@
       } catch (e) {
         /* about:blank and similar */
       }
-      send(port, { type: 'init', settings: SG.publicSettings(settings), tracks: sniffer.tracksFor(tabId), tabHost });
+      send(port, {
+        type: 'init', settings: SG.publicSettings(settings), tracks: sniffer.tracksFor(tabId), tabHost,
+        tabUrl: port.sender.tab.url || '', tabTitle: port.sender.tab.title || '',
+      });
     });
 
     port.onMessage.addListener((msg) => {
@@ -205,6 +284,35 @@
         browser.tabs.create({ url, index: port.sender.tab.index + 1 });
       } else if (msg.type === 'saveSettings') {
         SG.saveSettings(msg.patch);
+      } else if (msg.type === 'tabInfo') {
+        tabInfo(tabId).then((info) => send(port, { type: 'tabInfo', reqId: msg.reqId, info }));
+      } else if (msg.type === 'findSubs') {
+        ready
+          .then(() => SG.providers.search(settings, msg.episode, msg.langs))
+          .then(
+            (found) => send(port, { type: 'subsFound', reqId: msg.reqId, found }),
+            (err) => send(port, { type: 'subsFound', reqId: msg.reqId, error: err.message }),
+          );
+      } else if (msg.type === 'loadSub') {
+        ready
+          .then(() => loadSubtitle(msg.result, msg.episode))
+          .then(
+            (loaded) => send(port, { type: 'subLoaded', reqId: msg.reqId, loaded }),
+            (err) => send(port, { type: 'subLoaded', reqId: msg.reqId, error: err.message }),
+          );
+      } else if (msg.type === 'autoSubs') {
+        ready
+          .then(() => autoSubtitle(msg.episode, msg.langs))
+          .then(
+            (loaded) => send(port, { type: 'subLoaded', reqId: msg.reqId, loaded, auto: true }),
+            (err) => send(port, { type: 'subLoaded', reqId: msg.reqId, error: err.message, auto: true }),
+          );
+      } else if (msg.type === 'saveSubOffset' && msg.episode && msg.lang) {
+        const k = SG.episode.key(msg.episode, msg.lang);
+        cache.getMany('picks', [k]).then((m) => {
+          const pick = m.get(k);
+          if (pick) cache.putMany('picks', [[k, Object.assign({}, pick, { offset: msg.offset, scale: msg.scale })]]);
+        });
       }
     });
 

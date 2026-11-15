@@ -4,6 +4,15 @@ A Firefox extension that turns the subtitles on any streaming site into a word-b
 
 Above every word you see what it means in this sentence, the pieces it is built from with what each piece does (`食べ eat + させ make someone do + られ passive + た past`), and its reading. Under each phrase, a coloured bar shows its job in the sentence (topic, object, predicate…). Hovering a word pauses the video and opens a note. A side panel shows the translation, a literal word-for-word rendering, the sentence structure, grammar notes and a clickable transcript.
 
+## Subtitles from subtitle sites
+
+Streaming sites often have no subtitles in the language you are learning. SubGloss can fetch them from **OpenSubtitles**, **SubDL** and **Jimaku** (Japanese anime subtitles) through their official APIs. Each needs a free account; add the keys under **Options → Subtitle sites**.
+
+- **Automatic:** after a few seconds of playback, if the site has no subtitles in your languages, SubGloss works out which episode is playing, picks the best match and loads it. Embedded players such as the ones donkey.to uses put the show's TMDB id, season and episode in their own address, so the episode is exact. On other sites it falls back to the page title, and only fills in the search form.
+- **Timing:** downloaded files are often a second or more off. If the site has its own subtitles in any language (often English), SubGloss lines the file up with them automatically, including the 25 / 23.976 fps mismatch. Otherwise use **−** / **+** in the panel (Shift-click for 2-second steps). The timing you set is remembered for that episode.
+- **By hand:** press **G** → **Find subtitles** to see every match, best first, and pick another file.
+- **Limits:** OpenSubtitles allows 5 downloads a day, or 20 if you add your username and password; SubDL and Jimaku are more generous. Every downloaded file is saved, so rewatching uses no downloads.
+
 ## Grammar guides
 
 Every word is tagged with the grammar forms it carries (causative-passive させられる, connective -아서/어서, the 把 construction…). Rest the pointer on a word and SubGloss opens a complete guide to its main form; click any other form to switch. Each guide covers:
@@ -21,6 +30,7 @@ Subtitles are sent to Claude in batches, ahead of the playhead, so most lines ar
 ![Hovering a word opens the guide to its grammar form](docs/hover.png)
 ![The side panel](docs/panel.png)
 ![The grammar library](docs/library.png)
+![Finding subtitles for the episode](docs/find.png)
 
 ## Install
 
@@ -95,4 +105,8 @@ npm run package
 | `extension/shared/subtitles.js` | Parsers for VTT, SRT, ASS, TTML and json3 |
 | `extension/shared/lang.js` | Language guessing used to pick the right track |
 | `extension/shared/guide.js` | Renders grammar guides in the overlay and the library |
+| `extension/shared/episode.js` | Works out which movie or episode is playing |
+| `extension/shared/sync.js` | Lines a downloaded subtitle file up with the site's own subtitles |
+| `extension/background/providers.js` | OpenSubtitles, SubDL and Jimaku search and download |
+| `extension/background/files.js` | Zip archives and legacy text encodings in downloaded files |
 | `extension/grammar/` | The grammar library page |

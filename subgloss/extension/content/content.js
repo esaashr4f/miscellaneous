@@ -65,6 +65,16 @@
   let picking = false;
   let lastSrc = '';
 
+  // Subtitle sites
+  let tabUrl = '';
+  let tabTitle = '';
+  let playedFor = 0; // seconds of playback seen on this video, so ads and previews do not trigger a search
+  let lastTickTime = null;
+  const autoTried = new Set(); // episode keys already searched automatically on this page
+  let autoBusy = false;
+  const subReqs = new Map(); // reqId -> callback
+  let offsetSaveTimer = null;
+
   // ---------------------------------------------------------------- helpers
 
   function h(tag, cls, text) {
@@ -145,6 +155,7 @@
         chooseActive();
       }
       lastSrc = src;
+      playedFor = 0;
     }
     readTextTracks();
     findCaptionElement();
@@ -176,6 +187,8 @@
     if (msg.type === 'init') {
       settings = Object.assign({}, SG.DEFAULTS, msg.settings);
       if (msg.tabHost) tabHost = msg.tabHost;
+      tabUrl = msg.tabUrl || tabUrl;
+      tabTitle = msg.tabTitle || tabTitle;
       for (const t of msg.tracks || []) addTrack(t);
       applySettings();
     } else if (msg.type === 'settings') {
@@ -187,6 +200,10 @@
       onAnalyzed(msg);
     } else if (msg.type === 'deepDelta' || msg.type === 'deepDone' || msg.type === 'deepError') {
       onDeep(msg);
+    } else if (msg.type === 'tabInfo' || msg.type === 'subsFound' || msg.type === 'subLoaded') {
+      const cb = subReqs.get(msg.reqId);
+      subReqs.delete(msg.reqId);
+      if (cb) cb(msg);
     }
   }
 
@@ -214,9 +231,15 @@
       source: t.source || 'net',
       cues: t.cues,
       keys,
-      offset: prev ? prev.offset : 0,
+      offset: prev ? prev.offset : t.offset || 0,
       updatedAt: Date.now(),
+      provider: t.provider || null,
+      episode: t.episode || null,
+      synced: prev ? prev.synced : false,
+      userOffset: prev ? prev.userOffset : Boolean(t.userOffset),
     });
+    // A subtitle file from a subtitle site can be lined up as soon as the site's own subtitles arrive.
+    if (t.source !== 'remote') for (const r of tracks.values()) if (r.source === 'remote' && !r.synced && !r.userOffset) syncRemote(r, false);
     chooseActive();
     if (ui) renderTrackList();
     if (t.id === activeId) {
@@ -229,7 +252,8 @@
     if (t.source === 'file') return 10000;
     const native = langCode(settings.nativeLang);
     if (t.lang === native) return -1;
-    let score = t.source === 'dom' ? 1 : 100;
+    // The site's own subtitles are timed to its video, so they beat a downloaded file in the same language.
+    let score = t.source === 'dom' ? 1 : t.source === 'remote' ? 80 : 100;
     if (settings.hostLang && settings.hostLang[tabHost] === t.lang) score += 500;
     const idx = (settings.learning || []).indexOf(t.lang);
     if (idx >= 0) score += 300 - idx * 10;
@@ -543,13 +567,20 @@
       const t = active();
       if (!t) return;
       t.offset = Math.round((t.offset + d) * 100) / 100;
+      t.userOffset = true;
       offset.textContent = (t.offset >= 0 ? '+' : '') + t.offset.toFixed(2) + 's';
+      rememberOffset(t);
       shownKey = null;
       tick();
     };
-    early.addEventListener('click', () => nudge(-0.25));
-    late.addEventListener('click', () => nudge(0.25));
-    tools.append(select, fileBtn, pickBtn, early, offset, late, file);
+    early.title += ' (Shift: 2 s)';
+    late.title += ' (Shift: 2 s)';
+    early.addEventListener('click', (e) => nudge(e.shiftKey ? -2 : -0.25));
+    late.addEventListener('click', (e) => nudge(e.shiftKey ? 2 : 0.25));
+    const findBtn = h('button', 'sg-btn', 'Find subtitles');
+    findBtn.title = 'Search OpenSubtitles, SubDL and Jimaku for this episode';
+    findBtn.addEventListener('click', () => openFind());
+    tools.append(select, findBtn, fileBtn, pickBtn, early, offset, late, file);
 
     const hint = h('div', 'sg-hint');
     const guide = h('div', 'sg-pguide');
@@ -566,8 +597,15 @@
     const detail = h('div', 'sg-detail');
     const listTitle = h('div', 'sg-section', 'Transcript');
     const list = h('div', 'sg-list');
-    el.append(head, tools, hint, guide, detail, listTitle, list);
-    return { el, status, select, offset, hint, guide, guideTitle, guideBody, detail, list, rows: new Map() };
+    const find = h('div', 'sg-pguide sg-find');
+    const findHead = h('div', 'sg-pguide-head');
+    const findBack = h('button', 'sg-btn', 'Back');
+    findBack.addEventListener('click', () => find.classList.remove('sg-show'));
+    findHead.append(h('span', 'sg-pguide-title', 'Find subtitles'), findBack);
+    const findBody = h('div', 'sg-pguide-body');
+    find.append(findHead, findBody);
+    el.append(head, tools, hint, find, guide, detail, listTitle, list);
+    return { el, status, select, offset, hint, find, findBody, guide, guideTitle, guideBody, detail, list, rows: new Map() };
   }
 
   // Keep the overlay glued to the video, including in fullscreen.
@@ -649,7 +687,7 @@
     select.textContent = '';
     if (!tracks.size) select.append(new Option('No subtitles found yet', ''));
     for (const t of tracks.values()) {
-      const kind = { net: '', texttrack: '', dom: ' (read from page)', file: ' (file)' }[t.source] || '';
+      const kind = { net: '', texttrack: '', dom: ' (read from page)', file: ' (file)', remote: ' (downloaded)' }[t.source] || '';
       const opt = new Option(`${langName(t.lang)} · ${t.label}${kind} · ${t.cues.length} lines`, t.id);
       opt.selected = t.id === activeId;
       select.append(opt);
@@ -1110,6 +1148,7 @@
 
   function openPanelGuide(form, ctx, w) {
     const p = ui.panel;
+    p.find.classList.remove('sg-show');
     p.guide.dataset.k = form.k;
     p.guideTitle.textContent = form.name || form.k;
     p.guide.classList.add('sg-show');
@@ -1239,6 +1278,265 @@
     showToast('Reading subtitles from the page.');
   }
 
+  // --------------------------------------------------------- subtitle sites
+
+  function request(msg) {
+    return new Promise((resolve) => {
+      const reqId = 's' + ++reqSeq;
+      subReqs.set(reqId, resolve);
+      if (!post(Object.assign({ reqId }, msg))) {
+        subReqs.delete(reqId);
+        resolve({ error: 'SubGloss lost its connection; reload the page.' });
+      }
+    });
+  }
+
+  async function currentEpisode() {
+    const res = await request({ type: 'tabInfo' });
+    if (res.info) {
+      tabUrl = res.info.url || tabUrl;
+      tabTitle = res.info.title || tabTitle;
+    }
+    const sources = [{ url: location.href, title: document.title }];
+    if (document.referrer) sources.push({ url: document.referrer, title: '' });
+    if (tabUrl && tabUrl !== location.href) sources.push({ url: tabUrl, title: tabTitle });
+    const og = document.querySelector('meta[property="og:title"]');
+    if (og && og.content) sources.push({ url: '', title: og.content });
+    return SG.episode.detect(sources);
+  }
+
+  function wantedLangs() {
+    const native = langCode(settings.nativeLang);
+    const list = (settings.learning || []).map(langCode).filter((l) => l && l !== 'und' && l !== native);
+    return list.length ? list : ['ja'];
+  }
+
+  function hasLearningTrack() {
+    const langs = wantedLangs();
+    for (const t of tracks.values()) if (t.source !== 'dom' && langs.includes(t.lang) && t.cues.length >= 5) return true;
+    return false;
+  }
+
+  function sourceName(id) {
+    return { opensubtitles: 'OpenSubtitles', subdl: 'SubDL', jimaku: 'Jimaku' }[id] || id;
+  }
+
+  // Lines a downloaded file up against the site's own subtitles, if there are any.
+  function syncRemote(t, announce) {
+    let ref = null;
+    for (const r of tracks.values()) {
+      if (r === t || r.source === 'remote' || r.source === 'file' || r.cues.length < 15) continue;
+      if (!ref || r.cues.length > ref.cues.length) ref = r;
+    }
+    if (!ref) {
+      if (announce) showToast('No other subtitles on this page to line the file up with. If the timing is off, use − / + in the panel (Shift for 2 s steps).');
+      return false;
+    }
+    const res = SG.sync.align(ref.cues.map((c) => ({ start: c.start + ref.offset })), t.cues);
+    if (!res.ok) {
+      if (announce) showToast(`Could not line the file up with the ${langName(ref.lang)} subtitles. If the timing is off, use − / + in the panel.`);
+      return false;
+    }
+    if (res.scale !== 1) {
+      t.cues = t.cues.map((c) => ({ start: c.start * res.scale, end: c.end * res.scale, text: c.text }));
+    }
+    t.offset = res.offset;
+    t.synced = true;
+    rememberOffset(t, res.scale);
+    shownKey = null;
+    if (t.id === activeId) {
+      renderTranscript();
+      renderTrackList();
+    }
+    if (announce !== false) {
+      const shift = Math.abs(res.offset) < 0.05 ? 'already in time' : `shifted ${res.offset > 0 ? '+' : ''}${res.offset.toFixed(2)} s`;
+      showToast(`Timing matched to the site's ${langName(ref.lang)} subtitles (${shift}${res.scale !== 1 ? ', frame rate corrected' : ''}).`);
+    }
+    return true;
+  }
+
+  function rememberOffset(t, scale) {
+    if (t.source !== 'remote' || !t.episode) return;
+    clearTimeout(offsetSaveTimer);
+    offsetSaveTimer = setTimeout(() => {
+      post({ type: 'saveSubOffset', episode: t.episode, lang: t.lang, offset: t.offset, scale: scale || 1 });
+    }, 800);
+  }
+
+  function useLoaded(loaded, ep, how) {
+    const track = Object.assign({}, loaded.track, { episode: ep });
+    if (loaded.reused && loaded.offset != null) {
+      track.offset = loaded.offset;
+      track.userOffset = true;
+    }
+    tracks.delete(track.id);
+    addTrack(track);
+    const t = tracks.get(track.id);
+    if (!t) return;
+    if (how === 'manual') {
+      manualPick = t.id;
+      activeId = null;
+      chooseActive();
+    }
+    const synced = t.userOffset ? false : syncRemote(t, false);
+    const parts = [`${how === 'auto' ? 'Loaded' : 'Using'} ${langName(t.lang)} subtitles from ${sourceName(t.provider)}`];
+    if (synced) parts.push(`timing matched to the site (${t.offset >= 0 ? '+' : ''}${t.offset.toFixed(2)} s)`);
+    else if (loaded.reused && t.userOffset) parts.push('with the timing you set last time');
+    let msg = parts.join(', ') + '.';
+    if (how === 'auto') msg += ' Wrong file? Press G → Find subtitles.';
+    if (loaded.note) msg += ' ' + loaded.note + '.';
+    showToast(msg);
+  }
+
+  // When the site has no subtitles in a language being learned, fetch them from a subtitle site.
+  async function maybeAutoFind() {
+    if (autoBusy || !settings.autoFind || !enabled() || !settings.hasKey || !(settings.subProviders || []).length) return;
+    if (!video || video.paused || playedFor < 6 || hasLearningTrack()) return;
+    autoBusy = true;
+    try {
+      const ep = await currentEpisode();
+      if (!SG.episode.confident(ep)) return;
+      const langs = wantedLangs();
+      const key = SG.episode.key(ep, langs.join(','));
+      if (autoTried.has(key)) return;
+      autoTried.add(key);
+      const res = await request({ type: 'autoSubs', episode: ep, langs });
+      if (hasLearningTrack()) return; // the site's own subtitles turned up meanwhile
+      if (res.loaded && res.loaded.track) useLoaded(res.loaded, ep, 'auto');
+      else if (res.loaded && res.loaded.searched) {
+        const why = res.loaded.errors && res.loaded.errors.length ? ' (' + res.loaded.errors[0] + ')' : '';
+        showToast(`No ${langs.map(langName).join(' / ')} subtitles found for ${SG.episode.describe(ep)}${why}. Press G → Find subtitles to search by hand.`);
+      }
+    } finally {
+      autoBusy = false;
+    }
+  }
+
+  function field(label, input) {
+    const wrap = h('label', 'sg-f');
+    wrap.append(h('span', 'sg-f-label', label), input);
+    return wrap;
+  }
+
+  async function openFind() {
+    const p = ui.panel;
+    p.guide.classList.remove('sg-show');
+    p.find.classList.add('sg-show');
+    const body = p.findBody;
+    body.textContent = '';
+    if (!(settings.subProviders || []).length) {
+      body.append(h('div', 'sg-g-p', 'No subtitle sites are set up yet. Open the SubGloss options and add a free OpenSubtitles, SubDL or Jimaku key under “Subtitle sites”.'));
+      return;
+    }
+    const ep = await currentEpisode();
+    const form = h('div', 'sg-form-grid');
+    const title = h('input', 'sg-in');
+    title.value = ep.title || '';
+    title.placeholder = 'Show or movie name';
+    const type = h('select', 'sg-in');
+    type.append(new Option('TV episode', 'tv'), new Option('Movie', 'movie'));
+    type.value = ep.type || (ep.episode != null ? 'tv' : 'tv');
+    const id = h('input', 'sg-in');
+    id.value = ep.tmdbId || ep.imdbId || '';
+    id.placeholder = 'TMDB or IMDb id (optional)';
+    const season = h('input', 'sg-in sg-num');
+    season.type = 'number';
+    season.min = '0';
+    season.value = ep.season == null ? (ep.type === 'movie' ? '' : '1') : ep.season;
+    const episode = h('input', 'sg-in sg-num');
+    episode.type = 'number';
+    episode.min = '0';
+    episode.value = ep.episode == null ? '' : ep.episode;
+    const lang = h('select', 'sg-in');
+    const langs = wantedLangs();
+    for (const code of langs) lang.append(new Option(langName(code), code));
+    for (const code of ['ja', 'ko', 'zh', 'th', 'vi', 'id', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'en']) {
+      if (!langs.includes(code)) lang.append(new Option(langName(code), code));
+    }
+    const go = h('button', 'sg-btn sg-go', 'Search');
+    form.append(field('Title', title), field('Type', type), field('ID', id), field('Season', season), field('Episode', episode), field('Language', lang));
+    const status = h('div', 'sg-find-status');
+    status.textContent = SG.episode.confident(ep) ? `Detected ${SG.episode.describe(ep)}.` : 'Check the title, season and episode, then search.';
+    const results = h('div', 'sg-results');
+    body.append(form, go, status, results);
+    const toggleSeason = () => {
+      const tv = type.value === 'tv';
+      season.parentNode.style.display = tv ? '' : 'none';
+      episode.parentNode.style.display = tv ? '' : 'none';
+    };
+    type.addEventListener('change', toggleSeason);
+    toggleSeason();
+
+    const run = async () => {
+      const raw = id.value.trim();
+      const query = {
+        type: type.value,
+        title: title.value.trim(),
+        tmdbId: /^\d+$/.test(raw) ? raw : null,
+        imdbId: /^tt\d+$/i.test(raw) ? raw.toLowerCase() : null,
+        season: type.value === 'tv' && season.value !== '' ? Number(season.value) : null,
+        episode: type.value === 'tv' && episode.value !== '' ? Number(episode.value) : null,
+        year: ep.year,
+      };
+      if (!query.title && !query.tmdbId && !query.imdbId) {
+        status.textContent = 'Enter a title or an id.';
+        return;
+      }
+      const wanted = [lang.value];
+      status.textContent = 'Searching…';
+      results.textContent = '';
+      go.disabled = true;
+      const res = await request({ type: 'findSubs', episode: query, langs: wanted });
+      go.disabled = false;
+      if (res.error) {
+        status.textContent = res.error;
+        return;
+      }
+      const found = res.found;
+      const notes = Object.entries(found.report).map(([pid, r]) => {
+        if (r.ok) return `${sourceName(pid)}: ${r.count}`;
+        return r.message.startsWith(sourceName(pid)) ? r.message : `${sourceName(pid)}: ${r.message}`;
+      });
+      status.textContent = (found.results.length ? `${found.results.length} found, best first. ` : 'Nothing found. Try the English title, or check the season and episode. ') + notes.join(' · ');
+      for (const r of found.results) {
+        const row = h('button', 'sg-result');
+        const top = h('div', 'sg-result-top');
+        top.append(h('span', 'sg-result-src', sourceName(r.provider)), h('span', 'sg-result-lang', langName(r.lang)), h('span', 'sg-result-name', r.name || '(no release name)'));
+        const meta = [];
+        if (r.title) meta.push(r.title);
+        if (r.season != null && r.episode != null) meta.push(`S${String(r.season).padStart(2, '0')}E${String(r.episode).padStart(2, '0')}`);
+        else if (r.episode != null) meta.push('episode ' + r.episode);
+        if (r.pack) meta.push('season pack');
+        if (r.downloads) meta.push(`${r.downloads.toLocaleString()} downloads`);
+        if (r.hi) meta.push('includes sound descriptions');
+        if (r.trusted) meta.push('trusted uploader');
+        row.append(top, h('div', 'sg-result-meta', meta.join(' · ')));
+        row.addEventListener('click', async () => {
+          for (const other of results.children) other.classList.remove('sg-on');
+          row.classList.add('sg-on', 'sg-loading');
+          status.textContent = 'Downloading…';
+          const loaded = await request({ type: 'loadSub', result: r, episode: query });
+          row.classList.remove('sg-loading');
+          if (loaded.error) {
+            status.textContent = loaded.error;
+            return;
+          }
+          status.textContent = 'Loaded. Pick another file here if this one is wrong or out of sync.';
+          useLoaded(loaded.loaded, query, 'manual');
+        });
+        results.append(row);
+      }
+    };
+    go.addEventListener('click', run);
+    for (const input of [title, id, season, episode]) {
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') run();
+      });
+    }
+    if (ep.title || ep.tmdbId || ep.imdbId) run();
+  }
+
   // ------------------------------------------------------------------ start
 
   function reportState() {
@@ -1266,7 +1564,12 @@
   }, 100);
   setInterval(() => {
     if (!video) return;
+    // Count real playback, so a few seconds of an ad or a preview do not start a search.
+    const now = video.currentTime;
+    if (!video.paused && lastTickTime != null && now > lastTickTime && now - lastTickTime < 3) playedFor += now - lastTickTime;
+    lastTickTime = now;
     pump();
     reportState();
+    maybeAutoFind();
   }, 1000);
 })();

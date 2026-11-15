@@ -35,6 +35,9 @@
       "background/cache.js",
       "background/claude.js",
       "background/sniffer.js",
+      "shared/episode.js",
+      "background/files.js",
+      "background/providers.js",
       "background/main.js"
     ]
   },
@@ -54,6 +57,8 @@
         "shared/subtitles.js",
         "shared/lang.js",
         "shared/guide.js",
+        "shared/episode.js",
+        "shared/sync.js",
         "content/content.js"
       ]
     }

@@ -31,6 +31,12 @@
     showRoles: true,
     showTranslation: true,
     fontScale: 1,
+    autoFind: true, // load subtitles from subtitle sites when the site has none in your language
+    osApiKey: '',
+    osUser: '',
+    osPass: '',
+    subdlKey: '',
+    jimakuKey: '',
     hoverPause: true,
     resumeOnLeave: true,
     autoDeep: true,
@@ -42,8 +48,8 @@
   SG.publicSettings = function (s) {
     const out = Object.assign({}, s);
     out.hasKey = Boolean(s.apiKey);
-    delete out.apiKey;
-    delete out.baseURL;
+    out.subProviders = [s.osApiKey && 'opensubtitles', s.subdlKey && 'subdl', s.jimakuKey && 'jimaku'].filter(Boolean);
+    for (const secret of ['apiKey', 'baseURL', 'osApiKey', 'osUser', 'osPass', 'subdlKey', 'jimakuKey']) delete out[secret];
     return out;
   };
 

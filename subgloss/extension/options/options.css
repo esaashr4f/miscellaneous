@@ -26,6 +26,11 @@ input[type="text"], input[type="password"], input[type="url"], input[type="numbe
 }
 input[type="number"] { width: 110px; }
 input[type="range"] { width: 100%; }
+.hint { margin: -4px 0 12px; color: var(--dim); font-size: 13.5px; }
+h3 { margin: 18px 0 8px; font-size: 14px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pair .field { margin-bottom: 4px; }
+small.block { display: block; margin: 0 0 6px; }
 .check { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
 .row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 14px; }
 button { padding: 7px 14px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--accent-text); font: inherit; font-weight: 600; cursor: pointer; }
